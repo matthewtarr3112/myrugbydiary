@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -214,6 +215,7 @@ function createPreviewEvents(weekStart: Date, template: TemplateDay[]): Calendar
 }
 
 export default function CalendarPage() {
+  const router = useRouter();
   const calendarRef = useRef<FullCalendar | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>(() =>
     createPreviewEvents(startOfWeek(new Date()), trainingWeekTemplate)
@@ -629,7 +631,16 @@ export default function CalendarPage() {
 
   return (
     <div className="min-h-screen w-full bg-neutral-950 text-white p-4">
-      <h1 className="text-2xl font-semibold mb-4">Training Calendar</h1>
+      <div className="mb-4 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-300 transition-colors hover:border-neutral-500 hover:bg-neutral-800 hover:text-white"
+        >
+          ← Back
+        </button>
+        <h1 className="text-2xl font-semibold">Training Calendar</h1>
+      </div>
 
       {/* WEEK TEMPLATES */}
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 mb-4">
