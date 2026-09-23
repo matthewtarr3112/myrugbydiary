@@ -268,6 +268,7 @@ export default function CalendarPage() {
 
   const [bdayDate, setBdayDate] = useState("");
   const [bdayName, setBdayName] = useState("");
+  const birthdayDateRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -773,21 +774,6 @@ export default function CalendarPage() {
               ))}
             </select>
 
-            <div className="space-y-1 mb-3">
-              {(duties[dutyDate] || []).map((t, i) => (
-                <div
-                  key={i}
-                  className="flex justify-between bg-black/20 rounded-lg px-2 py-1.5 text-xs"
-                >
-                  <span className="text-neutral-300">{t.task}</span>
-                  <span className="text-neutral-500">{t.assignedTo}</span>
-                </div>
-              ))}
-              {(duties[dutyDate] || []).length === 0 && (
-                <p className="text-neutral-600 text-xs">No duties set</p>
-              )}
-            </div>
-
             <input
               type="text"
               value={dutyTask}
@@ -815,9 +801,17 @@ export default function CalendarPage() {
               Add Birthday
             </p>
             <input
+              ref={birthdayDateRef}
               type="date"
               value={bdayDate}
               onChange={(e) => setBdayDate(e.target.value)}
+              onClick={() => birthdayDateRef.current?.showPicker?.()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  birthdayDateRef.current?.showPicker?.();
+                }
+              }}
+              aria-label="Birthday date"
               className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-2 py-1.5 text-xs mb-1 outline-none focus:border-emerald-500"
             />
             <input
