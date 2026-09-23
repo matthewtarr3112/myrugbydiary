@@ -1,0 +1,894 @@
+"use client";
+import { useEffect, useRef, useState } from "react";
+import FullCalendar from "@fullcalendar/react";
+import timeGridPlugin from "@fullcalendar/timegrid";
+import interactionPlugin from "@fullcalendar/interaction";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  updateDoc,
+  setDoc,
+  doc,
+  arrayUnion,
+  Timestamp,
+  getDocs,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+
+const sessionTypes = [
+  { value: "gym", label: "Gym", color: "#3b82f6" },
+  { value: "theory", label: "Theory", color: "#22d3ee" },
+  { value: "field", label: "Field", color: "#10b981" },
+  { value: "rest", label: "Rest", color: "#71717a" },
+  { value: "meeting", label: "Meeting", color: "#a1a1aa" },
+  { value: "refuel", label: "Refuel", color: "#f59e0b" },
+];
+
+const loadOptions = [
+  { value: "high", label: "H", color: "#ef4444" },
+  { value: "low", label: "L", color: "#eab308" },
+  { value: "rest", label: "R", color: "#71717a" },
+];
+
+type DutyEntry = {
+  task: string;
+  assignedTo: string;
+};
+
+type QuoteEntry = {
+  text: string;
+  author: string;
+};
+
+type CalendarEvent = {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  backgroundColor: string;
+  borderColor: string;
+  textColor?: string;
+  allDay?: boolean;
+};
+
+type SessionTemplate = {
+  title: string;
+  start: string;
+  end: string;
+  type: string;
+};
+
+type TemplateDay = {
+  offset: number;
+  load: string;
+  sessions: SessionTemplate[];
+};
+
+type NoteEntry = {
+  id: string;
+  type?: string;
+  date: string;
+  text: string;
+};
+
+type FixtureEntry = {
+  id: string;
+  homeAway: string;
+  opponent: string;
+  date: Date;
+};
+
+function dateKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+function startOfWeek(d: Date) {
+  const date = new Date(d);
+  const day = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - day);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+const foundationWeekSeed = [
+  {
+    offset: 0,
+    load: "high",
+    quote: {
+      text: "Success is to wake up each morning and consciously decide that today will be the best day of your life.",
+      author: "Ken Poirot",
+    },
+    duties: [
+      { task: "Water station", assignedTo: "M. Brown" },
+      { task: "Kit prep", assignedTo: "T. Smith" },
+    ],
+    sessions: [
+      { title: "Gym Strength", start: "07:00", end: "08:30", type: "gym" },
+      { title: "Theory Session", start: "09:00", end: "10:00", type: "theory" },
+      { title: "Skills Lab", start: "10:30", end: "11:45", type: "field" },
+      { title: "Lunch", start: "12:00", end: "13:00", type: "refuel" },
+    ],
+  },
+  {
+    offset: 1,
+    load: "low",
+    duties: [{ task: "Recovery checks", assignedTo: "A. Khan" }],
+    sessions: [
+      { title: "Mobility & Activation", start: "07:00", end: "08:00", type: "gym" },
+      { title: "Leadership Review", start: "09:00", end: "10:00", type: "meeting" },
+      { title: "Contact Skills", start: "10:30", end: "12:00", type: "field" },
+    ],
+  },
+  {
+    offset: 2,
+    load: "high",
+    duties: [{ task: "Pitch setup", assignedTo: "L. Dlamini" }],
+    sessions: [
+      { title: "Gym Power", start: "07:00", end: "08:30", type: "gym" },
+      { title: "Tactical Theory", start: "09:00", end: "10:00", type: "theory" },
+      { title: "Aerobics Block", start: "10:30", end: "12:00", type: "field" },
+    ],
+  },
+  {
+    offset: 3,
+    load: "rest",
+    duties: [{ task: "Recovery & stretch", assignedTo: "J. van Wyk" }],
+    sessions: [
+      { title: "Recovery Walk", start: "07:30", end: "08:15", type: "rest" },
+      { title: "Mobility Session", start: "17:00", end: "18:00", type: "rest" },
+    ],
+  },
+  {
+    offset: 4,
+    load: "rest",
+    duties: [{ task: "Heritage Day prep", assignedTo: "Team" }],
+    sessions: [
+      { title: "Heritage Day", start: "10:00", end: "12:00", type: "meeting" },
+      { title: "Recovery", start: "15:00", end: "16:00", type: "rest" },
+    ],
+  },
+  {
+    offset: 5,
+    load: "rest",
+    duties: [{ task: "Braai support", assignedTo: "Team" }],
+    sessions: [{ title: "Family / Social Day", start: "11:00", end: "12:00", type: "rest" }],
+  },
+  {
+    offset: 6,
+    load: "rest",
+    duties: [{ task: "Reset & weekly review", assignedTo: "Coaching staff" }],
+    sessions: [{ title: "Recovery & Review", start: "09:00", end: "10:00", type: "rest" }],
+  },
+];
+
+const trainingWeekTemplate: TemplateDay[] = foundationWeekSeed.map((day) => ({
+  offset: day.offset,
+  load: day.load,
+  sessions: day.sessions,
+}));
+
+function createMatchWeekTemplate(matchDay: "friday" | "saturday"): TemplateDay[] {
+  const days = trainingWeekTemplate.map((day) => ({
+    ...day,
+    sessions: [...day.sessions],
+  }));
+  const matchOffset = matchDay === "friday" ? 4 : 5;
+  days[matchOffset] = {
+    offset: matchOffset,
+    load: "high",
+    sessions: [{ title: "Match", start: "19:00", end: "21:00", type: "field" }],
+  };
+  days[matchOffset === 4 ? 5 : 4] = {
+    offset: matchOffset === 4 ? 5 : 4,
+    load: "rest",
+    sessions: [{ title: "Recovery & Review", start: "09:00", end: "10:00", type: "rest" }],
+  };
+  return days;
+}
+
+function createPreviewEvents(weekStart: Date, template: TemplateDay[]): CalendarEvent[] {
+  return template.flatMap((day, dayIndex) =>
+    day.sessions.map((session, sessionIndex) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + day.offset);
+      const [startHour, startMinute] = session.start.split(":").map(Number);
+      const [endHour, endMinute] = session.end.split(":").map(Number);
+      const start = new Date(date);
+      const end = new Date(date);
+      start.setHours(startHour, startMinute, 0, 0);
+      end.setHours(endHour, endMinute, 0, 0);
+      const typeInfo = sessionTypes.find((type) => type.value === session.type);
+
+      return {
+        id: `preview-${dayIndex}-${sessionIndex}`,
+        title: session.title,
+        start,
+        end,
+        backgroundColor: typeInfo ? typeInfo.color + "26" : "#71717a26",
+        borderColor: typeInfo ? typeInfo.color : "#71717a",
+      };
+    })
+  );
+}
+
+export default function CalendarPage() {
+  const calendarRef = useRef<FullCalendar | null>(null);
+  const [events, setEvents] = useState<CalendarEvent[]>(() =>
+    createPreviewEvents(startOfWeek(new Date()), trainingWeekTemplate)
+  );
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [pendingSlot, setPendingSlot] = useState<{ start: Date; end: Date } | null>(null);
+  const [title, setTitle] = useState("");
+  const [type, setType] = useState("gym");
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [template, setTemplate] = useState<"training" | "match">("training");
+  const [matchDay, setMatchDay] = useState<"friday" | "saturday">("saturday");
+
+  const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date()));
+  const [dayMeta, setDayMeta] = useState<Record<string, string>>(() => {
+    const values: Record<string, string> = {};
+    const weekStart = startOfWeek(new Date());
+    foundationWeekSeed.forEach((day) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + day.offset);
+      values[dateKey(date)] = day.load;
+    });
+    return values;
+  });
+  const [duties, setDuties] = useState<Record<string, DutyEntry[]>>(() => {
+    const values: Record<string, DutyEntry[]> = {};
+    const weekStart = startOfWeek(new Date());
+    foundationWeekSeed.forEach((day) => {
+      const date = new Date(weekStart);
+      date.setDate(weekStart.getDate() + day.offset);
+      values[dateKey(date)] = day.duties;
+    });
+    return values;
+  });
+  const [quotes, setQuotes] = useState<Record<string, QuoteEntry>>(() => {
+    const quote = foundationWeekSeed[0].quote;
+    return quote ? { [dateKey(startOfWeek(new Date()))]: quote } : {};
+  });
+  const [notes, setNotes] = useState<NoteEntry[]>([]);
+  const [fixtures, setFixtures] = useState<FixtureEntry[]>([]);
+
+  const [dutyDate, setDutyDate] = useState(dateKey(new Date()));
+  const [dutyTask, setDutyTask] = useState("");
+  const [dutyPlayer, setDutyPlayer] = useState("");
+
+  const [draftQuote, setDraftQuote] = useState<QuoteEntry>(() => {
+    const quote = foundationWeekSeed[0].quote;
+    return quote || { text: "", author: "" };
+  });
+
+  const [bdayDate, setBdayDate] = useState("");
+  const [bdayName, setBdayName] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const seedFoundationWeek = async () => {
+      try {
+        const sessionSnap = await getDocs(collection(db, "sessions"));
+        if (cancelled || !sessionSnap.empty) return;
+
+        const weekStart = startOfWeek(new Date());
+        const seedDays = foundationWeekSeed.map((day) => {
+          const date = new Date(weekStart);
+          date.setDate(weekStart.getDate() + day.offset);
+          return {
+            ...day,
+            date,
+          };
+        });
+
+        await Promise.all(
+          seedDays.flatMap(({ date, load, quote, duties, sessions }) => [
+            setDoc(doc(db, "dayMeta", dateKey(date)), { load }, { merge: true }),
+            ...(quote
+              ? [setDoc(doc(db, "quotes", dateKey(date)), quote, { merge: true })]
+              : []),
+            setDoc(doc(db, "duties", dateKey(date)), { tasks: duties }, { merge: true }),
+            ...sessions.map((session) =>
+              addDoc(collection(db, "sessions"), {
+                title: session.title,
+                type: session.type,
+                start: Timestamp.fromDate(combineDateAndTime(date, session.start)),
+                end: Timestamp.fromDate(combineDateAndTime(date, session.end)),
+                lead: "",
+              })
+            ),
+          ])
+        );
+      } catch (error) {
+        console.warn("Firestore schedule seed unavailable; showing the local preview.", error);
+      }
+    };
+
+    seedFoundationWeek();
+
+    const unsub = onSnapshot(collection(db, "sessions"), (snap) => {
+      const loaded = snap.docs.map((d) => {
+        const data = d.data();
+        const typeInfo = sessionTypes.find((t) => t.value === data.type);
+        return {
+          id: d.id,
+          title: data.title,
+          start: data.start.toDate(),
+          end: data.end.toDate(),
+          backgroundColor: typeInfo ? typeInfo.color + "26" : "#71717a26",
+          borderColor: typeInfo ? typeInfo.color : "#71717a",
+        };
+      });
+      if (!cancelled) setEvents(loaded);
+    });
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "dayMeta"), (snap) => {
+      const map: Record<string, string> = {};
+      snap.docs.forEach((d) => (map[d.id] = d.data().load));
+      setDayMeta(map);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "duties"), (snap) => {
+      const map: Record<string, DutyEntry[]> = {};
+      snap.docs.forEach((d) => {
+        const data = d.data() as { tasks?: DutyEntry[] };
+        map[d.id] = data.tasks || [];
+      });
+      setDuties(map);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "quotes"), (snap) => {
+      const map: Record<string, QuoteEntry> = {};
+      snap.docs.forEach((d) => {
+        const data = d.data() as QuoteEntry;
+        map[d.id] = data;
+      });
+      setQuotes(map);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "notes"), (snap) => {
+      setNotes(
+        snap.docs.map((d) => {
+          const data = d.data() as Partial<NoteEntry>;
+          return {
+            id: d.id,
+            type: data.type,
+            date: data.date || "",
+            text: data.text || "",
+          } satisfies NoteEntry;
+        })
+      );
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "fixtures"), (snap) => {
+      setFixtures(
+        snap.docs.map((d) => {
+          const data = d.data() as {
+            homeAway: string;
+            opponent: string;
+            date: { toDate: () => Date };
+          };
+          return {
+            id: d.id,
+            homeAway: data.homeAway,
+            opponent: data.opponent,
+            date: data.date.toDate(),
+          } satisfies FixtureEntry;
+        })
+      );
+    });
+    return unsub;
+  }, []);
+
+  const weekKey = dateKey(weekAnchor);
+
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekAnchor);
+    d.setDate(weekAnchor.getDate() + i);
+    return d;
+  });
+
+  const birthdayEvents = notes
+    .filter((n) => n.type === "birthday")
+    .map((n) => ({
+      id: "bday-" + n.id,
+      title: `🎂 ${n.text}`,
+      start: n.date,
+      allDay: true,
+      backgroundColor: "#eab30833",
+      borderColor: "#eab308",
+      textColor: "#fde68a",
+    }));
+
+  const fixtureEvents = fixtures.map((f) => ({
+    id: "fixture-" + f.id,
+    title: `🏉 ${f.homeAway === "home" ? "vs" : "@"} ${f.opponent}`,
+    start: f.date,
+    end: new Date(f.date.getTime() + 2 * 60 * 60 * 1000),
+    backgroundColor: "#8b5cf633",
+    borderColor: "#8b5cf6",
+    textColor: "#e9d5ff",
+  }));
+
+  function handleSelect(info: { start: Date; end: Date }) {
+    setPendingSlot({ start: info.start, end: info.end });
+    setEditingEventId(null);
+    setTitle("");
+    setType("gym");
+    setStartTime(toTimeString(info.start));
+    setEndTime(toTimeString(info.end));
+    setModalOpen(true);
+  }
+
+  function handleEventClick(info: {
+    event: { id: string; title: string; start: Date | null; end: Date | null };
+  }) {
+    if (info.event.id.startsWith("bday-") || info.event.id.startsWith("fixture-")) return;
+    if (!info.event.start || !info.event.end) return;
+    setEditingEventId(info.event.id);
+    setPendingSlot({ start: info.event.start, end: info.event.end });
+    setTitle(info.event.title);
+    const selectedEvent = events.find((event) => event.id === info.event.id);
+    const selectedType = sessionTypes.find((sessionType) => sessionType.color === selectedEvent?.borderColor);
+    setType(selectedType?.value || "field");
+    setStartTime(toTimeString(info.event.start));
+    setEndTime(toTimeString(info.event.end));
+    setModalOpen(true);
+  }
+
+  function toTimeString(d: Date) {
+    return d.toTimeString().slice(0, 5);
+  }
+
+  function combineDateAndTime(baseDate: Date, timeStr: string) {
+    const [h, m] = timeStr.split(":").map(Number);
+    const d = new Date(baseDate);
+    d.setHours(h, m, 0, 0);
+    return d;
+  }
+
+  async function handleSave() {
+    if (!pendingSlot || !title) return;
+    const start = combineDateAndTime(pendingSlot.start, startTime);
+    const end = combineDateAndTime(pendingSlot.start, endTime);
+    if (editingEventId) {
+      setEvents((current) =>
+        current.map((event) =>
+          event.id === editingEventId ? { ...event, title, start, end } : event
+        )
+      );
+      try {
+        await updateDoc(doc(db, "sessions", editingEventId), {
+          title,
+          start: Timestamp.fromDate(start),
+          end: Timestamp.fromDate(end),
+          type,
+        });
+      } catch (error) {
+        console.warn("Session name/time saved to the local preview only.", error);
+      }
+    } else {
+      const typeInfo = sessionTypes.find((sessionType) => sessionType.value === type);
+      const localEvent: CalendarEvent = {
+        id: `local-${Date.now()}`,
+        title,
+        start,
+        end,
+        backgroundColor: typeInfo ? typeInfo.color + "26" : "#71717a26",
+        borderColor: typeInfo ? typeInfo.color : "#71717a",
+      };
+      setEvents((current) => [...current, localEvent]);
+      try {
+        await addDoc(collection(db, "sessions"), {
+          title,
+          start: Timestamp.fromDate(start),
+          end: Timestamp.fromDate(end),
+          type,
+          lead: "",
+        });
+      } catch (error) {
+        console.warn("New session saved to the local preview only.", error);
+      }
+    }
+    setModalOpen(false);
+  }
+
+  async function handleEventChange(info: {
+    event: { id: string; start: Date | null; end: Date | null };
+  }) {
+    if (info.event.id.startsWith("bday-") || info.event.id.startsWith("fixture-")) return;
+    if (!info.event.start || !info.event.end) return;
+    setEvents((current) =>
+      current.map((event) =>
+        event.id === info.event.id
+          ? { ...event, start: info.event.start as Date, end: info.event.end as Date }
+          : event
+      )
+    );
+    try {
+      await updateDoc(doc(db, "sessions", info.event.id), {
+        start: Timestamp.fromDate(info.event.start),
+        end: Timestamp.fromDate(info.event.end),
+      });
+    } catch (error) {
+      console.warn("Session time saved to the local preview only.", error);
+    }
+  }
+
+  function applyTemplate() {
+    const selectedTemplate =
+      template === "training" ? trainingWeekTemplate : createMatchWeekTemplate(matchDay);
+    setEvents(createPreviewEvents(weekAnchor, selectedTemplate));
+    const nextLoads: Record<string, string> = {};
+    selectedTemplate.forEach((day) => {
+      const date = new Date(weekAnchor);
+      date.setDate(weekAnchor.getDate() + day.offset);
+      nextLoads[dateKey(date)] = day.load;
+    });
+    setDayMeta((current) => ({ ...current, ...nextLoads }));
+  }
+
+  async function setDayLoad(key: string, load: string) {
+    await setDoc(doc(db, "dayMeta", key), { load }, { merge: true });
+  }
+
+  async function addDuty() {
+    if (!dutyTask || !dutyPlayer) return;
+    await setDoc(
+      doc(db, "duties", dutyDate),
+      { tasks: arrayUnion({ task: dutyTask, assignedTo: dutyPlayer }) },
+      { merge: true }
+    );
+    setDutyTask("");
+    setDutyPlayer("");
+  }
+
+  async function saveQuote() {
+    await setDoc(
+      doc(db, "quotes", weekKey),
+      { text: draftQuote.text, author: draftQuote.author },
+      { merge: true }
+    );
+  }
+
+  async function addBirthday() {
+    if (!bdayDate || !bdayName) return;
+    await addDoc(collection(db, "notes"), {
+      date: bdayDate,
+      text: bdayName,
+      type: "birthday",
+    });
+    setBdayDate("");
+    setBdayName("");
+  }
+
+  return (
+    <div className="min-h-screen w-full bg-neutral-950 text-white p-4">
+      <h1 className="text-2xl font-semibold mb-4">Training Calendar</h1>
+
+      {/* WEEK TEMPLATES */}
+      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 mb-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="flex-1">
+            <p className="text-xs text-neutral-500 uppercase tracking-wide mb-2">
+              Start with a week template
+            </p>
+            <select
+              value={template}
+              onChange={(e) => setTemplate(e.target.value as "training" | "match")}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm outline-none"
+            >
+              <option value="training">Training Week</option>
+              <option value="match">Match Week</option>
+            </select>
+          </div>
+          {template === "match" && (
+            <div className="flex-1">
+              <label className="text-xs text-neutral-500 uppercase tracking-wide mb-2 block">
+                Match day
+              </label>
+              <select
+                value={matchDay}
+                onChange={(e) => setMatchDay(e.target.value as "friday" | "saturday")}
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm outline-none"
+              >
+                <option value="saturday">Saturday</option>
+                <option value="friday">Friday</option>
+              </select>
+            </div>
+          )}
+          <button
+            onClick={applyTemplate}
+            className="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-4 py-2 text-sm font-medium"
+          >
+            Apply Template
+          </button>
+        </div>
+        <p className="text-xs text-neutral-500 mt-3">
+          Drag a session to change its time. Click any session to edit its name or times.
+        </p>
+      </div>
+
+      {/* QUOTE OF THE WEEK */}
+      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 mb-4">
+        <p className="text-xs text-neutral-500 uppercase tracking-wide mb-2">
+          Quote of the Week
+        </p>
+        <textarea
+          value={draftQuote.text}
+          onChange={(e) => setDraftQuote((current) => ({ ...current, text: e.target.value }))}
+          placeholder="Enter this week's quote..."
+          className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500 mb-2"
+          rows={2}
+        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={draftQuote.author}
+            onChange={(e) => setDraftQuote((current) => ({ ...current, author: e.target.value }))}
+            placeholder="Author"
+            className="flex-1 bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500"
+          />
+          <button
+            onClick={saveQuote}
+            className="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-4 text-sm font-medium"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+
+      {/* DAY LOAD STRIP */}
+      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 mb-4">
+        <p className="text-xs text-neutral-500 uppercase tracking-wide mb-3">
+          Day Load
+        </p>
+        <div className="flex gap-2 overflow-x-auto">
+          {weekDays.map((d) => {
+            const key = dateKey(d);
+            const current = dayMeta[key];
+            return (
+              <div key={key} className="flex flex-col items-center gap-1 min-w-[3.5rem]">
+                <span className="text-xs text-neutral-500">
+                  {d.toLocaleDateString(undefined, { weekday: "short" })}
+                </span>
+                <div className="flex gap-1">
+                  {loadOptions.map((o) => (
+                    <button
+                      key={o.value}
+                      onClick={() => setDayLoad(key, o.value)}
+                      className="w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center border"
+                      style={{
+                        backgroundColor: current === o.value ? o.color : "transparent",
+                        borderColor: o.color,
+                        color: current === o.value ? "white" : o.color,
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {/* CALENDAR */}
+        <div className="lg:col-span-3 bg-neutral-900 rounded-2xl p-4">
+          <FullCalendar
+            ref={calendarRef}
+            plugins={[timeGridPlugin, interactionPlugin]}
+            initialView="timeGridWeek"
+            firstDay={1}
+            editable={true}
+            selectable={true}
+            select={handleSelect}
+            eventClick={handleEventClick}
+            eventDrop={handleEventChange}
+            eventResize={handleEventChange}
+            events={[...events, ...birthdayEvents, ...fixtureEvents]}
+            datesSet={(arg) => {
+              const nextWeek = startOfWeek(new Date(arg.start));
+              setWeekAnchor(nextWeek);
+              const nextQuote = quotes[dateKey(nextWeek)];
+              setDraftQuote({
+                text: nextQuote?.text || "",
+                author: nextQuote?.author || "",
+              });
+            }}
+            height="auto"
+            slotMinTime="06:00:00"
+            slotMaxTime="22:00:00"
+          />
+        </div>
+
+        {/* DUTY ROSTER */}
+        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-4">
+          <div>
+            <p className="text-xs text-neutral-500 uppercase tracking-wide mb-2">
+              Duty Roster
+            </p>
+            <select
+              value={dutyDate}
+              onChange={(e) => setDutyDate(e.target.value)}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-2 py-1.5 text-sm mb-2 outline-none"
+            >
+              {weekDays.map((d) => (
+                <option key={dateKey(d)} value={dateKey(d)}>
+                  {d.toLocaleDateString(undefined, { weekday: "long", day: "numeric" })}
+                </option>
+              ))}
+            </select>
+
+            <div className="space-y-1 mb-3">
+              {(duties[dutyDate] || []).map((t, i) => (
+                <div
+                  key={i}
+                  className="flex justify-between bg-black/20 rounded-lg px-2 py-1.5 text-xs"
+                >
+                  <span className="text-neutral-300">{t.task}</span>
+                  <span className="text-neutral-500">{t.assignedTo}</span>
+                </div>
+              ))}
+              {(duties[dutyDate] || []).length === 0 && (
+                <p className="text-neutral-600 text-xs">No duties set</p>
+              )}
+            </div>
+
+            <input
+              type="text"
+              value={dutyTask}
+              onChange={(e) => setDutyTask(e.target.value)}
+              placeholder="Task (e.g. Water)"
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-2 py-1.5 text-xs mb-1 outline-none focus:border-emerald-500"
+            />
+            <input
+              type="text"
+              value={dutyPlayer}
+              onChange={(e) => setDutyPlayer(e.target.value)}
+              placeholder="Player name"
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-2 py-1.5 text-xs mb-2 outline-none focus:border-emerald-500"
+            />
+            <button
+              onClick={addDuty}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 rounded-xl py-1.5 text-xs font-medium"
+            >
+              Add Duty
+            </button>
+          </div>
+
+          <div className="border-t border-neutral-800 pt-4">
+            <p className="text-xs text-neutral-500 uppercase tracking-wide mb-2">
+              Add Birthday
+            </p>
+            <input
+              type="date"
+              value={bdayDate}
+              onChange={(e) => setBdayDate(e.target.value)}
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-2 py-1.5 text-xs mb-1 outline-none focus:border-emerald-500"
+            />
+            <input
+              type="text"
+              value={bdayName}
+              onChange={(e) => setBdayName(e.target.value)}
+              placeholder="Name"
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-2 py-1.5 text-xs mb-2 outline-none focus:border-emerald-500"
+            />
+            <button
+              onClick={addBirthday}
+              className="w-full bg-amber-600 hover:bg-amber-500 rounded-xl py-1.5 text-xs font-medium"
+            >
+              Add Birthday
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="text-lg font-semibold mb-4">
+              {editingEventId ? "Edit Session" : "New Session"}
+            </h2>
+
+            <label className="text-xs text-neutral-500 uppercase tracking-wide">
+              Title
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Gym Conditioning"
+              className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 mt-1 mb-4 text-sm outline-none focus:border-emerald-500"
+            />
+
+            <label className="text-xs text-neutral-500 uppercase tracking-wide">
+              Type
+            </label>
+            <div className="grid grid-cols-3 gap-2 mt-1 mb-4">
+              {sessionTypes.map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => setType(t.value)}
+                  className={`rounded-xl px-2 py-2 text-xs font-medium border transition-colors ${
+                    type === t.value ? "border-white/60" : "border-transparent opacity-60"
+                  }`}
+                  style={{ backgroundColor: t.color + "33", color: t.color }}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div>
+                <label className="text-xs text-neutral-500 uppercase tracking-wide">
+                  Start
+                </label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 mt-1 text-sm outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-neutral-500 uppercase tracking-wide">
+                  End
+                </label>
+                <input
+                  type="time"
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 mt-1 text-sm outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModalOpen(false)}
+                className="flex-1 bg-neutral-800 hover:bg-neutral-700 rounded-xl py-2 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2 text-sm font-medium"
+              >
+                {editingEventId ? "Save Changes" : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

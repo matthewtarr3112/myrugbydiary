@@ -1,0 +1,64 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isCoach() {
+      return signedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "coach";
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role in ["coach", "player"];
+      allow read: if signedIn()
+        && (request.auth.uid == userId || isCoach());
+      allow update: if isCoach() || (signedIn() && request.auth.uid == userId);
+      allow delete: if isCoach();
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+
+    match /dayMeta/{dayId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+
+    match /duties/{dutyId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+
+    match /quotes/{quoteId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+
+    match /notes/{noteId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+
+    match /fixtures/{fixtureId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+
+    match /players/{playerId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+
+    match /programs/{programId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+  }
+}
