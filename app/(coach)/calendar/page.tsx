@@ -222,6 +222,7 @@ export default function CalendarPage() {
   );
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const [pendingSlot, setPendingSlot] = useState<{ start: Date; end: Date } | null>(null);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("gym");
@@ -273,6 +274,18 @@ export default function CalendarPage() {
   const [bdayDate, setBdayDate] = useState("");
   const [bdayName, setBdayName] = useState("");
   const birthdayDateRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const updateCalendarView = () => {
+      const mobile = window.matchMedia("(max-width: 640px)").matches;
+      setIsMobile(mobile);
+      calendarRef.current?.getApi().changeView(mobile ? "timeGridDay" : "timeGridWeek");
+    };
+
+    updateCalendarView();
+    window.addEventListener("resize", updateCalendarView);
+    return () => window.removeEventListener("resize", updateCalendarView);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -717,6 +730,11 @@ export default function CalendarPage() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* CALENDAR */}
         <div className="min-w-0 overflow-hidden rounded-2xl bg-neutral-900 p-2 sm:p-4 lg:col-span-3">
+          {isMobile && (
+            <p className="mb-2 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-center text-xs text-emerald-300">
+              Daily view · use the arrows to move between days
+            </p>
+          )}
           <FullCalendar
             ref={calendarRef}
             plugins={[timeGridPlugin, interactionPlugin]}
