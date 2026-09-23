@@ -703,42 +703,6 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* DAY LOAD STRIP */}
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 mb-4">
-        <p className="text-xs text-neutral-500 uppercase tracking-wide mb-3">
-          Day Load
-        </p>
-        <div className="flex gap-2 overflow-x-auto">
-          {weekDays.map((d) => {
-            const key = dateKey(d);
-            const current = dayMeta[key];
-            return (
-              <div key={key} className="flex flex-col items-center gap-1 min-w-[3.5rem]">
-                <span className="text-xs text-neutral-500">
-                  {d.toLocaleDateString(undefined, { weekday: "short" })}
-                </span>
-                <div className="flex gap-1">
-                  {loadOptions.map((o) => (
-                    <button
-                      key={o.value}
-                      onClick={() => setDayLoad(key, o.value)}
-                      className="w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center border"
-                      style={{
-                        backgroundColor: current === o.value ? o.color : "transparent",
-                        borderColor: o.color,
-                        color: current === o.value ? "white" : o.color,
-                      }}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* CALENDAR */}
         <div className="lg:col-span-3 bg-neutral-900 rounded-2xl p-4">
@@ -759,9 +723,32 @@ export default function CalendarPage() {
                 .filter((note) => note.type === "birthday" && note.date === key)
                 .map((note) => note.text);
               const dayDuties = duties[key] || [];
+              const currentLoad = dayMeta[key];
 
               return (
                 <div className="w-full min-w-0 px-1 pb-1 text-left">
+                  <div className="mb-1 flex justify-center gap-1">
+                    {loadOptions.map((option) => (
+                      <button
+                        type="button"
+                        key={option.value}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDayLoad(key, option.value);
+                        }}
+                        className="flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-bold"
+                        style={{
+                          backgroundColor:
+                            currentLoad === option.value ? option.color : "transparent",
+                          borderColor: option.color,
+                          color: currentLoad === option.value ? "white" : option.color,
+                        }}
+                        title={`${option.label} load`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="text-center text-xs font-semibold uppercase tracking-wide text-neutral-300">
                     {arg.text}
                   </div>
