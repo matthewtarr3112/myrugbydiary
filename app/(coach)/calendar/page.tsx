@@ -630,8 +630,8 @@ export default function CalendarPage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-neutral-950 text-white p-4">
-      <div className="mb-4 flex items-center gap-3">
+    <div className="min-h-screen w-full min-w-0 overflow-x-hidden bg-neutral-950 p-2 text-white sm:p-4">
+      <div className="mb-4 flex min-w-0 items-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={() => router.push("/")}
@@ -639,7 +639,7 @@ export default function CalendarPage() {
         >
           ← Back
         </button>
-        <h1 className="text-2xl font-semibold">Training Calendar</h1>
+        <h1 className="truncate text-xl font-semibold sm:text-2xl">Training Calendar</h1>
       </div>
 
       {/* WEEK TEMPLATES */}
@@ -716,7 +716,7 @@ export default function CalendarPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* CALENDAR */}
-        <div className="lg:col-span-3 bg-neutral-900 rounded-2xl p-4">
+        <div className="min-w-0 overflow-hidden rounded-2xl bg-neutral-900 p-2 sm:p-4 lg:col-span-3">
           <FullCalendar
             ref={calendarRef}
             plugins={[timeGridPlugin, interactionPlugin]}
@@ -770,7 +770,7 @@ export default function CalendarPage() {
                           type="button"
                           key={`duty-${index}`}
                           onClick={() => beginDutyEdit(key, index, duty)}
-                          className="truncate rounded bg-emerald-500/15 px-1 py-0.5 text-emerald-300"
+                          className="block w-full truncate rounded bg-emerald-500/15 px-1 py-0.5 text-left text-emerald-300"
                           title={`${duty.task} — ${duty.assignedTo}`}
                         >
                           <span className="font-medium">{duty.task}</span>
