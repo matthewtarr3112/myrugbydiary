@@ -10,7 +10,6 @@ import {
   updateDoc,
   setDoc,
   doc,
-  arrayUnion,
   Timestamp,
   getDocs,
 } from "firebase/firestore";
@@ -260,6 +259,9 @@ export default function CalendarPage() {
   const [dutyDate, setDutyDate] = useState(dateKey(new Date()));
   const [dutyTask, setDutyTask] = useState("");
   const [dutyPlayer, setDutyPlayer] = useState("");
+  const [editingDuty, setEditingDuty] = useState<{ date: string; index: number } | null>(null);
+  const [editingDutyTask, setEditingDutyTask] = useState("");
+  const [editingDutyPlayer, setEditingDutyPlayer] = useState("");
 
   const [draftQuote, setDraftQuote] = useState<QuoteEntry>(() => {
     const quote = foundationWeekSeed[0].quote;
@@ -548,13 +550,62 @@ export default function CalendarPage() {
 
   async function addDuty() {
     if (!dutyTask || !dutyPlayer) return;
-    await setDoc(
-      doc(db, "duties", dutyDate),
-      { tasks: arrayUnion({ task: dutyTask, assignedTo: dutyPlayer }) },
-      { merge: true }
-    );
+    const nextDuties = [
+      ...(duties[dutyDate] || []),
+      { task: dutyTask, assignedTo: dutyPlayer },
+    ];
+    setDuties((current) => ({ ...current, [dutyDate]: nextDuties }));
+    try {
+      await setDoc(doc(db, "duties", dutyDate), { tasks: nextDuties }, { merge: true });
+    } catch (error) {
+      console.warn("Duty saved to the local preview only.", error);
+    }
     setDutyTask("");
     setDutyPlayer("");
+  }
+
+  function beginDutyEdit(date: string, index: number, duty: DutyEntry) {
+    setEditingDuty({ date, index });
+    setEditingDutyTask(duty.task);
+    setEditingDutyPlayer(duty.assignedTo);
+  }
+
+  async function saveDutyEdit() {
+    if (!editingDuty || !editingDutyTask || !editingDutyPlayer) return;
+    const nextDuties = [...(duties[editingDuty.date] || [])];
+    nextDuties[editingDuty.index] = {
+      task: editingDutyTask,
+      assignedTo: editingDutyPlayer,
+    };
+    setDuties((current) => ({ ...current, [editingDuty.date]: nextDuties }));
+    try {
+      await setDoc(
+        doc(db, "duties", editingDuty.date),
+        { tasks: nextDuties },
+        { merge: true }
+      );
+    } catch (error) {
+      console.warn("Duty edit saved to the local preview only.", error);
+    }
+    setEditingDuty(null);
+  }
+
+  async function removeDuty() {
+    if (!editingDuty) return;
+    const nextDuties = (duties[editingDuty.date] || []).filter(
+      (_, index) => index !== editingDuty.index
+    );
+    setDuties((current) => ({ ...current, [editingDuty.date]: nextDuties }));
+    try {
+      await setDoc(
+        doc(db, "duties", editingDuty.date),
+        { tasks: nextDuties },
+        { merge: true }
+      );
+    } catch (error) {
+      console.warn("Duty removal saved to the local preview only.", error);
+    }
+    setEditingDuty(null);
   }
 
   async function saveQuote() {
@@ -717,14 +768,16 @@ export default function CalendarPage() {
                   {(dayDuties.length > 0 || birthdayNames.length > 0) && (
                     <div className="mt-1 space-y-0.5 text-[10px] leading-tight">
                       {dayDuties.map((duty, index) => (
-                        <div
+                        <button
+                          type="button"
                           key={`duty-${index}`}
+                          onClick={() => beginDutyEdit(key, index, duty)}
                           className="truncate rounded bg-emerald-500/15 px-1 py-0.5 text-emerald-300"
                           title={`${duty.task} — ${duty.assignedTo}`}
                         >
                           <span className="font-medium">{duty.task}</span>
                           <span className="text-emerald-200/70"> · {duty.assignedTo}</span>
-                        </div>
+                        </button>
                       ))}
                       {birthdayNames.map((name) => (
                         <div
@@ -830,6 +883,58 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
+
+      {editingDuty && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+            <h2 className="mb-1 text-lg font-semibold">Edit Duty</h2>
+            <p className="mb-4 text-xs text-neutral-500">
+              {new Date(`${editingDuty.date}T12:00:00`).toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </p>
+            <input
+              type="text"
+              value={editingDutyTask}
+              onChange={(event) => setEditingDutyTask(event.target.value)}
+              placeholder="Task"
+              className="mb-2 w-full rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+            />
+            <input
+              type="text"
+              value={editingDutyPlayer}
+              onChange={(event) => setEditingDutyPlayer(event.target.value)}
+              placeholder="Assigned to"
+              className="mb-5 w-full rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingDuty(null)}
+                className="flex-1 rounded-xl bg-neutral-800 py-2 text-sm font-medium hover:bg-neutral-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={removeDuty}
+                className="flex-1 rounded-xl bg-red-600 py-2 text-sm font-medium hover:bg-red-500"
+              >
+                Remove
+              </button>
+              <button
+                type="button"
+                onClick={saveDutyEdit}
+                className="flex-1 rounded-xl bg-emerald-600 py-2 text-sm font-medium hover:bg-emerald-500"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
