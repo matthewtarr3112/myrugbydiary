@@ -413,18 +413,6 @@ export default function CalendarPage() {
     return d;
   });
 
-  const birthdayEvents = notes
-    .filter((n) => n.type === "birthday")
-    .map((n) => ({
-      id: "bday-" + n.id,
-      title: `🎂 ${n.text}`,
-      start: n.date,
-      allDay: true,
-      backgroundColor: "#eab30833",
-      borderColor: "#eab308",
-      textColor: "#fde68a",
-    }));
-
   const fixtureEvents = fixtures.map((f) => ({
     id: "fixture-" + f.id,
     title: `🏉 ${f.homeAway === "home" ? "vs" : "@"} ${f.opponent}`,
@@ -448,7 +436,7 @@ export default function CalendarPage() {
   function handleEventClick(info: {
     event: { id: string; title: string; start: Date | null; end: Date | null };
   }) {
-    if (info.event.id.startsWith("bday-") || info.event.id.startsWith("fixture-")) return;
+    if (info.event.id.startsWith("fixture-")) return;
     if (!info.event.start || !info.event.end) return;
     setEditingEventId(info.event.id);
     setPendingSlot({ start: info.event.start, end: info.event.end });
@@ -713,7 +701,45 @@ export default function CalendarPage() {
             eventClick={handleEventClick}
             eventDrop={handleEventChange}
             eventResize={handleEventChange}
-            events={[...events, ...birthdayEvents, ...fixtureEvents]}
+            dayHeaderContent={(arg) => {
+              const key = dateKey(arg.date);
+              const birthdayNames = notes
+                .filter((note) => note.type === "birthday" && note.date === key)
+                .map((note) => note.text);
+              const dayDuties = duties[key] || [];
+
+              return (
+                <div className="w-full min-w-0 px-1 pb-1 text-left">
+                  <div className="text-center text-xs font-semibold uppercase tracking-wide text-neutral-300">
+                    {arg.text}
+                  </div>
+                  {(dayDuties.length > 0 || birthdayNames.length > 0) && (
+                    <div className="mt-1 space-y-0.5 text-[10px] leading-tight">
+                      {dayDuties.map((duty, index) => (
+                        <div
+                          key={`duty-${index}`}
+                          className="truncate rounded bg-emerald-500/15 px-1 py-0.5 text-emerald-300"
+                          title={`${duty.task} — ${duty.assignedTo}`}
+                        >
+                          <span className="font-medium">{duty.task}</span>
+                          <span className="text-emerald-200/70"> · {duty.assignedTo}</span>
+                        </div>
+                      ))}
+                      {birthdayNames.map((name) => (
+                        <div
+                          key={`birthday-${name}`}
+                          className="truncate rounded bg-amber-500/15 px-1 py-0.5 text-amber-300"
+                          title={`Birthday: ${name}`}
+                        >
+                          🎂 {name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            }}
+            events={[...events, ...fixtureEvents]}
             datesSet={(arg) => {
               const nextWeek = startOfWeek(new Date(arg.start));
               setWeekAnchor(nextWeek);
