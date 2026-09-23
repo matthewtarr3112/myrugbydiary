@@ -16,6 +16,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "My Rugby Diary",
   description: "A simple rugby team planning and coaching diary.",
+  applicationName: "My Rugby Diary",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.svg",
+  },
 };
 
 export const viewport: Viewport = {
