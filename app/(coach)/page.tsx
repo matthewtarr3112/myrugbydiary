@@ -214,13 +214,13 @@ export default function CoachHome() {
         })}`;
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white pb-10">
-      <header className="px-6 pt-8 pb-6 flex items-center justify-between">
-        <div>
+    <div className="min-h-screen min-w-0 max-w-full overflow-x-hidden bg-neutral-950 pb-10 text-white">
+      <header className="flex min-w-0 items-center justify-between px-4 pb-6 pt-8 sm:px-6">
+        <div className="min-w-0">
           <p className="text-sm text-neutral-500">
             {isToday && viewMode === "day" ? "Today" : dateLabel}
           </p>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">
             Good morning, Coach
           </h1>
         </div>
@@ -231,8 +231,8 @@ export default function CoachHome() {
 
       {quote?.text && (
         <div className="px-6 mb-4">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4">
-            <p className="text-sm italic text-neutral-300">"{quote.text}"</p>
+          <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
+              <p className="break-words text-sm italic text-neutral-300">"{quote.text}"</p>
             {quote.author && (
               <p className="text-xs text-neutral-500 mt-1">— {quote.author}</p>
             )}
@@ -240,9 +240,9 @@ export default function CoachHome() {
         </div>
       )}
 
-      <section className="px-6 mb-8">
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="bg-neutral-900 rounded-2xl p-4 border border-neutral-800">
+      <section className="mb-8 min-w-0 px-4 sm:px-6">
+        <div className="mb-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
             <div className="flex items-center gap-2 text-neutral-400 mb-2">
               <Cloud size={16} />
               <span className="text-xs font-medium uppercase tracking-wide">Weather</span>
@@ -277,7 +277,7 @@ export default function CoachHome() {
               </div>
             )}
           </div>
-          <div className="bg-neutral-900 rounded-2xl p-4 border border-neutral-800">
+          <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
             <div className="flex items-center gap-2 text-neutral-400 mb-2">
               <ClipboardCheck size={16} />
               <span className="text-xs font-medium uppercase tracking-wide">Attendance</span>
@@ -286,11 +286,11 @@ export default function CoachHome() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-emerald-950 to-neutral-900 rounded-2xl p-5 border border-emerald-900/40 mb-3">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 text-emerald-400">
+        <div className="mb-3 min-w-0 rounded-2xl border border-emerald-900/40 bg-gradient-to-br from-emerald-950 to-neutral-900 p-4 sm:p-5">
+          <div className="mb-3 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2 text-emerald-400">
               <CalendarDays size={16} />
-              <span className="text-xs font-medium uppercase tracking-wide">{dateLabel}</span>
+              <span className="truncate text-xs font-medium uppercase tracking-wide">{dateLabel}</span>
               {viewMode === "day" && todaysLoad && loadLabels[todaysLoad] && (
                 <span
                   className="text-[10px] font-bold px-2 py-0.5 rounded-full ml-1"
@@ -304,7 +304,7 @@ export default function CoachHome() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center justify-between gap-2">
               <div className="flex bg-black/30 rounded-full p-0.5">
                 <button
                   onClick={() => setViewMode("day")}
@@ -382,7 +382,7 @@ export default function CoachHome() {
               </div>
             )
           ) : (
-            <div className="bg-black/20 rounded-xl p-2">
+            <div className="min-w-0 overflow-hidden rounded-xl bg-black/20 p-2">
               <FullCalendar
                 ref={calendarRef}
                 plugins={[timeGridPlugin, interactionPlugin]}
@@ -399,7 +399,7 @@ export default function CoachHome() {
           )}
         </div>
 
-        <div className="bg-neutral-900 rounded-2xl p-5 border border-neutral-800">
+        <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 sm:p-5">
           <div className="flex items-center gap-2 text-neutral-400 mb-2">
             <Bell size={16} />
             <span className="text-xs font-medium uppercase tracking-wide">
@@ -425,7 +425,7 @@ export default function CoachHome() {
         </div>
       </section>
 
-      <section className="px-6">
+      <section className="min-w-0 px-4 sm:px-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-neutral-500 mb-3">
           Diary
         </h2>
