@@ -4,18 +4,24 @@ import { useRouter } from "next/navigation";
 import { CalendarDays } from "lucide-react";
 import { useAuth } from "@/lib/useAuth";
 
+// TEMP: player login/role assignment isn't wired up yet, so the auth guard
+// below is disabled to allow previewing this page. Restore it once player
+// accounts can actually authenticate.
+const PREVIEW_MODE = true;
+
 export default function PlayerHome() {
   const { user, role, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
+    if (PREVIEW_MODE) return;
     if (loading) return;
     if (!user || role !== "player") {
       router.push("/login");
     }
   }, [user, role, loading, router]);
 
-  if (loading || !user || role !== "player") {
+  if (!PREVIEW_MODE && (loading || !user || role !== "player")) {
     return <div className="min-h-screen w-full bg-neutral-950 text-white">Loading...</div>;
   }
 
