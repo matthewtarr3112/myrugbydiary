@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { collection, doc, setDoc, writeBatch } from "firebase/firestore";
+import { collection, doc, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { SEED_PLAYERS, SEED_TARGETS } from "@/lib/seedData";
 import { useAuth } from "@/lib/useAuth";
@@ -36,6 +36,8 @@ export default function ImportPlayersPage() {
         heightCm: null,
         weightKg: null,
         photoUrl: null,
+        email: null,
+        inviteStatus: "not_invited",
         jerseyNumber: null,
         createdAt: new Date().toISOString(),
       });

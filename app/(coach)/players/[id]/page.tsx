@@ -5,7 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import {
   doc, getDoc, getDocs, setDoc, addDoc, collection, query, where,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { sendSignInLinkToEmail } from "firebase/auth";
+import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/lib/useAuth";
 import {
   METRIC_DEFS, POSITION_GROUPS, PositionGroup, compareToTarget, parseMetricValue,
@@ -28,6 +29,8 @@ interface PlayerDoc {
   heightCm: number | null;
   weightKg: number | null;
   photoUrl: string | null;
+  email: string | null;
+  inviteStatus: "not_invited" | "invited" | "active";
 }
 
 interface MetricRow {
@@ -46,6 +49,8 @@ const BLANK_PLAYER: PlayerDoc = {
   heightCm: null,
   weightKg: null,
   photoUrl: null,
+  email: null,
+  inviteStatus: "not_invited",
 };
 
 export default function PlayerCardPage() {
@@ -60,6 +65,8 @@ export default function PlayerCardPage() {
   const [targets, setTargets] = useState<Record<string, string | number> | null>(null);
   const [fetching, setFetching] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState("");
 
   useEffect(() => {
     if (loading || role !== "coach" || isNew) return;
@@ -87,7 +94,7 @@ export default function PlayerCardPage() {
 
   useEffect(() => {
     if (!player.primaryPosition) {
-      setTargets(null);
+      window.setTimeout(() => setTargets(null), 0);
       return;
     }
     (async () => {
@@ -106,11 +113,40 @@ export default function PlayerCardPage() {
     if (!player.name.trim()) return;
     setSaving(true);
     if (isNew) {
-      const ref = await addDoc(collection(db, "players"), player);
+      const ref = await addDoc(collection(db, "players"), {
+        ...player,
+        email: player.email?.trim().toLowerCase() || null,
+      });
       router.push(`/players/${ref.id}`);
     } else {
       await setDoc(doc(db, "players", id), player, { merge: true });
       setSaving(false);
+    }
+
+  }
+
+  async function handleInvite() {
+    const email = player.email?.trim().toLowerCase();
+    if (!email || isNew || player.inviteStatus === "active") return;
+    setInviting(true);
+    setInviteMessage("");
+    try {
+      await sendSignInLinkToEmail(auth, email, {
+        url: `${window.location.origin}/claim`,
+        handleCodeInApp: true,
+      });
+      window.localStorage.setItem("myrugbydiaryInviteEmail", email);
+      await setDoc(
+        doc(db, "players", id),
+        { email, inviteStatus: "invited" },
+        { merge: true }
+      );
+      setPlayer((current) => ({ ...current, email, inviteStatus: "invited" }));
+      setInviteMessage(`Invite sent to ${email}.`);
+    } catch (error) {
+      setInviteMessage(error instanceof Error ? error.message : "Unable to send invite.");
+    } finally {
+      setInviting(false);
     }
   }
 
@@ -155,6 +191,47 @@ export default function PlayerCardPage() {
             onChange={(e) => setPlayer({ ...player, photoUrl: e.target.value || null })}
             className="w-full bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2 text-sm"
           />
+          {!isNew && (
+            <div className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+              <label className="block text-xs uppercase tracking-wide text-neutral-500">
+                Player email
+              </label>
+              <input
+                type="email"
+                placeholder="player@example.com"
+                value={player.email ?? ""}
+                onChange={(e) =>
+                  setPlayer({
+                    ...player,
+                    email: e.target.value || null,
+                    inviteStatus: player.inviteStatus === "active" ? "active" : "not_invited",
+                  })
+                }
+                className="w-full rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={handleInvite}
+                disabled={
+                  inviting ||
+                  !player.email?.trim() ||
+                  player.inviteStatus === "active"
+                }
+                className="w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-black disabled:opacity-50"
+              >
+                {inviting
+                  ? "Sending invite..."
+                  : player.inviteStatus === "active"
+                    ? "Player account active"
+                    : player.inviteStatus === "invited"
+                      ? "Resend Invite"
+                      : "Invite to App"}
+              </button>
+              {inviteMessage && (
+                <p className="text-xs text-neutral-400">{inviteMessage}</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: details form */}

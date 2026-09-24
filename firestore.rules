@@ -52,8 +52,29 @@ service cloud.firestore {
     }
 
     match /players/{playerId} {
-      allow read: if signedIn();
-      allow write: if isCoach();
+      allow read: if isCoach()
+        || (signedIn()
+          && (
+            (resource.data.keys().hasAny(["uid"])
+              && resource.data.uid == request.auth.uid)
+            || resource.data.email == request.auth.token.email
+          ));
+      allow create: if isCoach();
+      allow update: if isCoach()
+        || (
+          signedIn()
+          && resource.data.email == request.auth.token.email
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.inviteStatus == "active"
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "uid", "inviteStatus", "name", "dob", "heightCm", "weightKg", "photoUrl"
+          ])
+          && (
+            !resource.data.keys().hasAny(["uid"])
+            || resource.data.uid == request.auth.uid
+          )
+        );
+      allow delete: if isCoach();
     }
 
     match /programs/{programId} {
