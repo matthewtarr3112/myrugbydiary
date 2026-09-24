@@ -144,7 +144,21 @@ export default function PlayerCardPage() {
       setPlayer((current) => ({ ...current, email, inviteStatus: "invited" }));
       setInviteMessage(`Invite sent to ${email}.`);
     } catch (error) {
-      setInviteMessage(error instanceof Error ? error.message : "Unable to send invite.");
+      const code =
+        error && typeof error === "object" && "code" in error
+          ? String(error.code)
+          : "";
+      if (code === "auth/operation-not-allowed") {
+        setInviteMessage(
+          "Email-link sign-in is disabled in Firebase Authentication. Enable it under Authentication > Sign-in method."
+        );
+      } else if (code === "auth/unauthorized-continue-uri") {
+        setInviteMessage(
+          `This app URL is not authorized in Firebase Authentication. Add ${window.location.origin} under Authentication > Settings > Authorized domains.`
+        );
+      } else {
+        setInviteMessage(error instanceof Error ? error.message : "Unable to send invite.");
+      }
     } finally {
       setInviting(false);
     }

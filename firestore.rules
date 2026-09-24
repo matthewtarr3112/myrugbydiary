@@ -75,10 +75,10 @@ service cloud.firestore {
           signedIn()
           && resource.data.email == request.auth.token.email
           && request.resource.data.uid == request.auth.uid
-          // Players may accept an invite (pending -> active) but otherwise may not change inviteStatus
+          // Players may accept an invite (invited -> active) but otherwise may not change inviteStatus
           && (
             request.resource.data.inviteStatus == resource.data.inviteStatus
-            || (resource.data.inviteStatus == "pending" && request.resource.data.inviteStatus == "active")
+            || (resource.data.inviteStatus == "invited" && request.resource.data.inviteStatus == "active")
           )
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "uid", "inviteStatus", "name", "dob", "heightCm", "weightKg", "photoUrl"
