@@ -264,6 +264,7 @@ export default function CalendarPage() {
   const [template, setTemplate] = useState<"blank" | "match" | "previous">("blank");
 
   const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date()));
+  const [visibleDate, setVisibleDate] = useState(() => new Date());
   const [dayMeta, setDayMeta] = useState<Record<string, string>>({});
   const [duties, setDuties] = useState<Record<string, DutyEntry[]>>({});
   const [quotes, setQuotes] = useState<Record<string, QuoteEntry>>({});
@@ -398,6 +399,11 @@ export default function CalendarPage() {
     d.setDate(weekAnchor.getDate() + i);
     return d;
   });
+
+  const visibleDayKey = dateKey(visibleDate);
+  const visibleDayEvents = events
+    .filter((event) => dateKey(event.start) === visibleDayKey)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
 
   const fixtureEvents = fixtures.map((f) => ({
     id: "fixture-" + f.id,
@@ -798,6 +804,7 @@ export default function CalendarPage() {
               Daily view · use the arrows to move between days
             </p>
           )}
+          <div className="hidden sm:block">
           <FullCalendar
             ref={calendarRef}
             plugins={[timeGridPlugin, interactionPlugin]}
@@ -885,6 +892,7 @@ export default function CalendarPage() {
             datesSet={(arg) => {
               const nextWeek = startOfWeek(new Date(arg.start));
               setWeekAnchor(nextWeek);
+              setVisibleDate(new Date(arg.start));
               const nextQuote = quotes[dateKey(nextWeek)];
               setDraftQuote({
                 text: nextQuote?.text || "",
@@ -895,6 +903,117 @@ export default function CalendarPage() {
             slotMinTime="06:00:00"
             slotMaxTime="22:00:00"
           />
+          </div>
+          <div className="sm:hidden">
+            <div className="mb-3 flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-950 px-3 py-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const previous = new Date(visibleDate);
+                  previous.setDate(previous.getDate() - 1);
+                  setVisibleDate(previous);
+                }}
+                className="rounded-lg px-3 py-1 text-lg text-neutral-300 hover:bg-neutral-800"
+                aria-label="Previous day"
+              >
+                ←
+              </button>
+              <div className="text-center">
+                <p className="text-sm font-semibold text-white">
+                  {visibleDate.toLocaleDateString(undefined, { weekday: "long" })}
+                </p>
+                <p className="text-xs text-neutral-500">
+                  {visibleDate.toLocaleDateString(undefined, { day: "numeric", month: "long" })}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new Date(visibleDate);
+                  next.setDate(next.getDate() + 1);
+                  setVisibleDate(next);
+                }}
+                className="rounded-lg px-3 py-1 text-lg text-neutral-300 hover:bg-neutral-800"
+                aria-label="Next day"
+              >
+                →
+              </button>
+            </div>
+            {visibleDayEvents.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-neutral-700 px-3 py-8 text-center text-sm text-neutral-500">
+                Nothing scheduled
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {visibleDayEvents.map((event) => (
+                  <button
+                    type="button"
+                    key={event.id}
+                    onClick={() => handleEventClick({ event })}
+                    className="flex w-full items-start gap-3 rounded-xl border border-neutral-800 bg-neutral-950 p-3 text-left"
+                  >
+                    <span
+                      className="mt-0.5 h-10 w-1 shrink-0 rounded-full"
+                      style={{ backgroundColor: event.borderColor }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-xs text-neutral-500">
+                        {toTimeString(event.start)} – {toTimeString(event.end)}
+                      </span>
+                      <span className="mt-1 block break-words text-sm font-medium text-white">
+                        {event.title}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="hidden rounded-2xl bg-neutral-900 p-4 sm:block">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Full schedule</p>
+              <p className="text-sm text-neutral-400">Every session is listed here, including short and overlapping slots.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
+            {weekDays.map((day) => {
+              const dayKey = dateKey(day);
+              const dayEvents = events
+                .filter((event) => dateKey(event.start) === dayKey)
+                .sort((a, b) => a.start.getTime() - b.start.getTime());
+              return (
+                <div key={dayKey} className="min-w-0 rounded-xl border border-neutral-800 bg-neutral-950 p-2">
+                  <p className="mb-2 truncate text-xs font-semibold uppercase text-neutral-300">
+                    {day.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}
+                  </p>
+                  <div className="space-y-1.5">
+                    {dayEvents.length === 0 ? (
+                      <p className="text-xs text-neutral-600">No sessions</p>
+                    ) : (
+                      dayEvents.map((event) => (
+                        <button
+                          type="button"
+                          key={event.id}
+                          onClick={() => handleEventClick({ event })}
+                          className="w-full rounded-lg border border-neutral-800 px-2 py-1.5 text-left hover:bg-neutral-800"
+                        >
+                          <span className="block text-[10px] text-neutral-500">
+                            {toTimeString(event.start)} – {toTimeString(event.end)}
+                          </span>
+                          <span className="block break-words text-xs font-medium text-neutral-200">
+                            {event.title}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* DUTY ROSTER */}
