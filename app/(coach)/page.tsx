@@ -391,6 +391,15 @@ export default function CoachHome() {
                 initialDate={selectedDate}
                 headerToolbar={false}
                 events={[...allSessions, ...birthdayEvents]}
+                eventContent={(arg) => (
+                  <div
+                    className="fc-compact-event"
+                    title={`${arg.timeText} · ${arg.event.title}`}
+                  >
+                    <span className="fc-compact-event-time">{arg.timeText}</span>
+                    <span className="fc-compact-event-title">{arg.event.title}</span>
+                  </div>
+                )}
                 height="auto"
                 slotMinTime="06:00:00"
                 slotMaxTime="19:00:00"

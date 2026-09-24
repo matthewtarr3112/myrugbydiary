@@ -10,6 +10,8 @@ import {
   onSnapshot,
   updateDoc,
   setDoc,
+  writeBatch,
+  deleteDoc,
   doc,
   Timestamp,
 } from "firebase/firestore";
@@ -512,7 +514,7 @@ export default function CalendarPage() {
     }
   }
 
-  function applyTemplate() {
+  async function applyTemplate() {
     const previousWeek = new Date(weekAnchor);
     previousWeek.setDate(previousWeek.getDate() - 7);
     const selectedTemplate: TemplateDay[] =
@@ -561,12 +563,12 @@ export default function CalendarPage() {
     setDuties((current) => ({ ...current, ...nextDuties }));
     const sourceQuote = template === "match" ? matchWeekQuote : template === "previous" ? quotes[dateKey(previousWeek)] : undefined;
     setDraftQuote(sourceQuote || { text: "", author: "" });
-    setNotes((current) => [
-      ...current.filter((note) => note.type !== "birthday" || !targetKeys.has(note.date)),
+    const nextNotes = [
+      ...notes.filter((note) => note.type !== "birthday" || !targetKeys.has(note.date)),
       ...(template === "match"
         ? [{ id: `preview-birthday-${dateKey(weekAnchor)}`, date: dateKey(weekAnchor), text: "Liam", type: "birthday" }]
         : template === "previous"
-          ? current
+          ? notes
             .filter((note) => {
               const noteDate = new Date(note.date);
               const sourceEnd = new Date(previousWeek);
@@ -575,7 +577,63 @@ export default function CalendarPage() {
             })
             .map((note) => ({ ...note, id: `preview-${note.id}`, date: dateKey(new Date(new Date(note.date).setDate(new Date(note.date).getDate() + 7))) }))
           : []),
-    ]);
+    ];
+    setNotes(nextNotes);
+
+    try {
+      const batch = writeBatch(db);
+      events
+        .filter((event) => !event.id.startsWith("preview-") && !event.id.startsWith("local-"))
+        .filter((event) => targetKeys.has(dateKey(event.start)))
+        .forEach((event) => batch.delete(doc(db, "sessions", event.id)));
+
+      nextEvents.forEach((event) => {
+        const sessionRef = doc(collection(db, "sessions"));
+        batch.set(sessionRef, {
+          title: event.title,
+          type: event.type || "field",
+          start: Timestamp.fromDate(event.start),
+          end: Timestamp.fromDate(event.end),
+          lead: "",
+        });
+      });
+
+      weekDays.forEach((day) => {
+        const key = dateKey(day);
+        const load = nextLoads[key];
+        if (load) {
+          batch.set(doc(db, "dayMeta", key), { load }, { merge: true });
+        } else {
+          batch.delete(doc(db, "dayMeta", key));
+        }
+        batch.set(doc(db, "duties", key), { tasks: nextDuties[key] || [] }, { merge: true });
+      });
+
+      const quoteRef = doc(db, "quotes", weekKey);
+      if (sourceQuote?.text) {
+        batch.set(quoteRef, sourceQuote, { merge: true });
+      } else {
+        batch.delete(quoteRef);
+      }
+
+      await batch.commit();
+
+      const birthdayRef = doc(db, "notes", `birthday-${weekKey}`);
+      const birthday = nextNotes.find(
+        (note) => note.type === "birthday" && targetKeys.has(note.date)
+      );
+      if (birthday) {
+        await setDoc(birthdayRef, {
+          date: birthday.date,
+          text: birthday.text,
+          type: "birthday",
+        });
+      } else {
+        await deleteDoc(birthdayRef);
+      }
+    } catch (error) {
+      console.warn("Template applied to the local preview only.", error);
+    }
   }
 
   async function setDayLoad(key: string, load: string) {
@@ -732,9 +790,9 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {/* CALENDAR */}
-        <div className="min-w-0 overflow-hidden rounded-2xl bg-neutral-900 p-2 sm:p-4 lg:col-span-3">
+        <div className="min-w-0 overflow-hidden rounded-2xl bg-neutral-900 p-2 sm:p-4">
           {isMobile && (
             <p className="mb-2 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-center text-xs text-emerald-300">
               Daily view · use the arrows to move between days
@@ -751,6 +809,15 @@ export default function CalendarPage() {
             eventClick={handleEventClick}
             eventDrop={handleEventChange}
             eventResize={handleEventChange}
+            eventContent={(arg) => (
+              <div
+                className="fc-compact-event"
+                title={`${arg.timeText} · ${arg.event.title}`}
+              >
+                <span className="fc-compact-event-time">{arg.timeText}</span>
+                <span className="fc-compact-event-title">{arg.event.title}</span>
+              </div>
+            )}
             dayHeaderContent={(arg) => {
               const key = dateKey(arg.date);
               const birthdayNames = notes
@@ -831,7 +898,7 @@ export default function CalendarPage() {
         </div>
 
         {/* DUTY ROSTER */}
-        <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-4 space-y-4">
+        <div className="grid grid-cols-1 gap-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 md:grid-cols-2 md:space-y-0">
           <div>
             <p className="text-xs text-neutral-500 uppercase tracking-wide mb-2">
               Duty Roster
