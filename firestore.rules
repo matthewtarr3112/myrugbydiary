@@ -36,6 +36,11 @@ service cloud.firestore {
       allow write: if isCoach();
     }
 
+    match /sessionPrograms/{sessionId} {
+      allow read: if signedIn();
+      allow write: if isCoach();
+    }
+
     match /dayMeta/{dayId} {
       allow read: if signedIn();
       allow write: if isCoach();

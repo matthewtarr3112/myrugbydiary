@@ -83,6 +83,22 @@ type FixtureEntry = {
   date: Date;
 };
 
+type Exercise = {
+  name: string;
+  sets: number;
+  reps: string;
+  load: string;
+  notes: string;
+};
+
+const blankExercise = (): Exercise => ({
+  name: "",
+  sets: 1,
+  reps: "",
+  load: "",
+  notes: "",
+});
+
 function dateKey(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
@@ -261,6 +277,7 @@ export default function CalendarPage() {
   const [type, setType] = useState("gym");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [template, setTemplate] = useState<"blank" | "match" | "previous">("blank");
 
   const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date()));
@@ -270,6 +287,7 @@ export default function CalendarPage() {
   const [quotes, setQuotes] = useState<Record<string, QuoteEntry>>({});
   const [notes, setNotes] = useState<NoteEntry[]>([]);
   const [fixtures, setFixtures] = useState<FixtureEntry[]>([]);
+  const [sessionPrograms, setSessionPrograms] = useState<Record<string, Exercise[]>>({});
 
   const [dutyDate, setDutyDate] = useState(dateKey(new Date()));
   const [dutyTask, setDutyTask] = useState("");
@@ -392,6 +410,26 @@ export default function CalendarPage() {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "sessionPrograms"), (snap) => {
+      const map: Record<string, Exercise[]> = {};
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        map[d.id] = Array.isArray(data.exercises)
+          ? data.exercises.map((exercise) => ({
+              name: typeof exercise.name === "string" ? exercise.name : "",
+              sets: typeof exercise.sets === "number" ? exercise.sets : 1,
+              reps: typeof exercise.reps === "string" ? exercise.reps : "",
+              load: typeof exercise.load === "string" ? exercise.load : "",
+              notes: typeof exercise.notes === "string" ? exercise.notes : "",
+            }))
+          : [];
+      });
+      setSessionPrograms(map);
+    });
+    return unsub;
+  }, []);
+
   const weekKey = dateKey(weekAnchor);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -422,6 +460,7 @@ export default function CalendarPage() {
     setType("gym");
     setStartTime(toTimeString(info.start));
     setEndTime(toTimeString(info.end));
+    setExercises([]);
     setModalOpen(true);
   }
 
@@ -438,6 +477,7 @@ export default function CalendarPage() {
     setType(selectedType?.value || "field");
     setStartTime(toTimeString(info.event.start));
     setEndTime(toTimeString(info.event.end));
+    setExercises(sessionPrograms[info.event.id] || []);
     setModalOpen(true);
   }
 
@@ -469,6 +509,10 @@ export default function CalendarPage() {
           end: Timestamp.fromDate(end),
           type,
         });
+        if (type === "gym" || type === "field") {
+          await setDoc(doc(db, "sessionPrograms", editingEventId), { exercises });
+          setSessionPrograms((current) => ({ ...current, [editingEventId]: exercises }));
+        }
       } catch (error) {
         console.warn("Session name/time saved to the local preview only.", error);
       }
@@ -484,18 +528,43 @@ export default function CalendarPage() {
       };
       setEvents((current) => [...current, localEvent]);
       try {
-        await addDoc(collection(db, "sessions"), {
+        const sessionRef = await addDoc(collection(db, "sessions"), {
           title,
           start: Timestamp.fromDate(start),
           end: Timestamp.fromDate(end),
           type,
           lead: "",
         });
+        if (type === "gym" || type === "field") {
+          await setDoc(doc(db, "sessionPrograms", sessionRef.id), { exercises });
+        }
       } catch (error) {
         console.warn("New session saved to the local preview only.", error);
       }
     }
     setModalOpen(false);
+  }
+
+  function updateExercise(index: number, changes: Partial<Exercise>) {
+    setExercises((current) =>
+      current.map((exercise, exerciseIndex) =>
+        exerciseIndex === index ? { ...exercise, ...changes } : exercise
+      )
+    );
+  }
+
+  function removeExercise(index: number) {
+    setExercises((current) => current.filter((_, exerciseIndex) => exerciseIndex !== index));
+  }
+
+  function moveExercise(index: number, direction: -1 | 1) {
+    setExercises((current) => {
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return current;
+      const next = [...current];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   }
 
   async function handleEventChange(info: {
@@ -1145,7 +1214,7 @@ export default function CalendarPage() {
 
       {modalOpen && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-sm">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold mb-4">
               {editingEventId ? "Edit Session" : "New Session"}
             </h2>
@@ -1203,6 +1272,110 @@ export default function CalendarPage() {
                 />
               </div>
             </div>
+
+            {(type === "gym" || type === "field") && (
+              <section className="mb-5 rounded-xl border border-neutral-800 bg-neutral-950/50 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Session program</h3>
+                    <p className="text-xs text-neutral-500">
+                      Add the exercises players should follow for this session.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setExercises((current) => [...current, blankExercise()])}
+                    className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-medium hover:bg-emerald-500"
+                  >
+                    Add exercise
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {exercises.map((exercise, index) => (
+                    <div
+                      key={`${index}-${exercise.name}`}
+                      className="rounded-xl border border-neutral-800 bg-neutral-900 p-3"
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                          Exercise {index + 1}
+                        </span>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => moveExercise(index, -1)}
+                            disabled={index === 0}
+                            className="rounded bg-neutral-800 px-2 py-1 text-xs disabled:opacity-40"
+                            aria-label="Move exercise up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveExercise(index, 1)}
+                            disabled={index === exercises.length - 1}
+                            className="rounded bg-neutral-800 px-2 py-1 text-xs disabled:opacity-40"
+                            aria-label="Move exercise down"
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeExercise(index)}
+                            className="rounded bg-red-950 px-2 py-1 text-xs text-red-300"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <input
+                          value={exercise.name}
+                          onChange={(event) => updateExercise(index, { name: event.target.value })}
+                          placeholder="Exercise name"
+                          className="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm"
+                        />
+                        <input
+                          type="number"
+                          min="1"
+                          value={exercise.sets}
+                          onChange={(event) =>
+                            updateExercise(index, { sets: Math.max(1, Number(event.target.value) || 1) })
+                          }
+                          placeholder="Sets"
+                          className="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm"
+                        />
+                        <input
+                          value={exercise.reps}
+                          onChange={(event) => updateExercise(index, { reps: event.target.value })}
+                          placeholder="Reps (e.g. AMRAP)"
+                          className="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm"
+                        />
+                        <input
+                          value={exercise.load}
+                          onChange={(event) => updateExercise(index, { load: event.target.value })}
+                          placeholder="Load (e.g. RPE 8)"
+                          className="rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <textarea
+                        value={exercise.notes}
+                        onChange={(event) => updateExercise(index, { notes: event.target.value })}
+                        placeholder="Notes"
+                        rows={2}
+                        className="mt-2 w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm"
+                      />
+                    </div>
+                  ))}
+                  {!exercises.length && (
+                    <p className="rounded-lg border border-dashed border-neutral-800 p-3 text-center text-xs text-neutral-500">
+                      No exercises added yet.
+                    </p>
+                  )}
+                </div>
+              </section>
+            )}
 
             <div className="flex gap-2">
               <button
