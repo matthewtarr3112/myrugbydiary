@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useAuth } from "@/lib/useAuth";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { getWeather, weatherCodeMap } from "@/lib/weather";
+import { dateKey, getWeekStart } from "@/lib/date";
+import { WeatherWidget } from "@/components/WeatherWidget";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
@@ -19,7 +20,6 @@ import {
   LineChart,
   MessageSquare,
   CalendarRange,
-  Cloud,
   Bell,
   ChevronRight,
   ChevronLeft,
@@ -53,21 +53,6 @@ const loadLabels: Record<string, { label: string; color: string }> = {
   rest: { label: "Rest Day", color: "#71717a" },
 };
 
-function dateKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
-function getWeekStart(d: Date) {
-  const day = d.getDay();
-  const diff = (day === 0 ? -6 : 1) - day;
-  const monday = new Date(d);
-  monday.setDate(d.getDate() + diff);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
-
 export default function CoachHome() {
   const { user, role, loading } = useAuth();
   const router = useRouter();
@@ -80,16 +65,11 @@ export default function CoachHome() {
   const [duties, setDuties] = useState<Record<string, { task: string; assignedTo: string }[]>>({});
   const [notes, setNotes] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<Record<string, { text: string; author: string }>>({});
-  const [weather, setWeather] = useState<any>(null);
 
   useEffect(() => {
     if (loading) return;
     if (!user || role !== "coach") router.push("/login");
   }, [user, role, loading, router]);
-
-  useEffect(() => {
-    getWeather().then(setWeather).catch(() => setWeather(null));
-  }, []);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "sessions"), (snap) => {
@@ -261,41 +241,7 @@ export default function CoachHome() {
 
       <section className="mb-8 min-w-0 px-4 sm:px-6">
         <div className="mb-3 grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
-            <div className="flex items-center gap-2 text-neutral-400 mb-2">
-              <Cloud size={16} />
-              <span className="text-xs font-medium uppercase tracking-wide">Weather</span>
-            </div>
-            {!weather ? (
-              <p className="text-neutral-600 text-sm">Loading...</p>
-            ) : (
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">
-                    {weatherCodeMap[weather.current.weather_code]?.emoji || "—"}
-                  </span>
-                  <span className="text-xl font-semibold">
-                    {Math.round(weather.current.temperature_2m)}°C
-                  </span>
-                </div>
-                <div className="flex gap-2 overflow-x-auto">
-                  {weather.daily.time.slice(0, 4).map((day: string, i: number) => (
-                    <div key={day} className="flex flex-col items-center min-w-[2.5rem]">
-                      <span className="text-[10px] text-neutral-500">
-                        {new Date(day).toLocaleDateString(undefined, { weekday: "short" })}
-                      </span>
-                      <span className="text-sm">
-                        {weatherCodeMap[weather.daily.weather_code[i]]?.emoji || "—"}
-                      </span>
-                      <span className="text-[10px] text-neutral-400">
-                        {Math.round(weather.daily.temperature_2m_max[i])}°
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <WeatherWidget />
           <div className="min-w-0 rounded-2xl border border-neutral-800 bg-neutral-900 p-4">
             <div className="flex items-center gap-2 text-neutral-400 mb-2">
               <ClipboardCheck size={16} />

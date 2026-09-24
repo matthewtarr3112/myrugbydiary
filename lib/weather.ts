@@ -20,7 +20,18 @@ export const weatherCodeMap: Record<number, { label: string; emoji: string }> = 
   99: { label: "Severe Storm", emoji: "⛈️" },
 };
 
-export async function getWeather() {
+export interface WeatherResponse {
+  current: { temperature_2m: number; weather_code: number };
+  daily: {
+    time: string[];
+    temperature_2m_max: number[];
+    temperature_2m_min: number[];
+    weather_code: number[];
+    precipitation_probability_max: number[];
+  };
+}
+
+export async function getWeather(): Promise<WeatherResponse> {
   const lat = -26.10496;
   const lon = 28.21365;
   const res = await fetch(

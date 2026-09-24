@@ -7,6 +7,7 @@ import { auth, db } from "@/lib/firebase";
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [playerId, setPlayerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -14,14 +15,17 @@ export function useAuth() {
       setUser(firebaseUser);
       if (firebaseUser) {
         const snap = await getDoc(doc(db, "users", firebaseUser.uid));
-        setRole(snap.exists() ? (snap.data().role as string) : null);
+        const data = snap.exists() ? snap.data() : null;
+        setRole(data ? (data.role as string) : null);
+        setPlayerId(data && typeof data.playerId === "string" ? data.playerId : null);
       } else {
         setRole(null);
+        setPlayerId(null);
       }
       setLoading(false);
     });
     return unsub;
   }, []);
 
-  return { user, role, loading };
+  return { user, role, playerId, loading };
 }
