@@ -12,7 +12,6 @@ import {
   setDoc,
   doc,
   Timestamp,
-  getDocs,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -44,6 +43,7 @@ type QuoteEntry = {
 type CalendarEvent = {
   id: string;
   title: string;
+  type?: string;
   start: Date;
   end: Date;
   backgroundColor: string;
@@ -63,6 +63,8 @@ type TemplateDay = {
   offset: number;
   load: string;
   sessions: SessionTemplate[];
+  duties?: DutyEntry[];
+  birthdays?: string[];
 };
 
 type NoteEntry = {
@@ -93,101 +95,129 @@ function startOfWeek(d: Date) {
   return date;
 }
 
-const foundationWeekSeed = [
+const matchWeekTemplate: TemplateDay[] = [
   {
     offset: 0,
-    load: "high",
-    quote: {
-      text: "Success is to wake up each morning and consciously decide that today will be the best day of your life.",
-      author: "Ken Poirot",
-    },
-    duties: [
-      { task: "Water station", assignedTo: "M. Brown" },
-      { task: "Kit prep", assignedTo: "T. Smith" },
-    ],
+    load: "low",
+    birthdays: ["Liam"],
+    duties: [{ task: "CR key", assignedTo: "Eddie" }],
     sessions: [
-      { title: "Gym Strength", start: "07:00", end: "08:30", type: "gym" },
-      { title: "Theory Session", start: "09:00", end: "10:00", type: "theory" },
-      { title: "Skills Lab", start: "10:30", end: "11:45", type: "field" },
-      { title: "Lunch", start: "12:00", end: "13:00", type: "refuel" },
+      { title: "Man. Meeting", start: "06:00", end: "06:30", type: "meeting" },
+      { title: "Theory: Medicals & Meeting", start: "07:00", end: "07:35", type: "theory" },
+      { title: "Strapping", start: "08:00", end: "08:30", type: "rest" },
+      { title: "Physio Slot / Screening", start: "09:00", end: "09:30", type: "rest" },
+      { title: "Warm-up: Green Group", start: "09:15", end: "09:33", type: "field" },
+      { title: "Forwards: K/O & Shapes", start: "09:45", end: "10:05", type: "field" },
+      { title: "Backs: Skill Development", start: "10:05", end: "10:25", type: "field" },
+      { title: "Barefoot Cooldown", start: "11:00", end: "11:10", type: "rest" },
+      { title: "Lunch", start: "11:30", end: "12:00", type: "refuel" },
+      { title: "Coaches Meeting", start: "12:00", end: "12:30", type: "meeting" },
+      { title: "Gym: Primer, Main & Mobility", start: "12:30", end: "13:50", type: "gym" },
+      { title: "Aerobic Endurance Top-up 2", start: "14:00", end: "14:30", type: "field" },
     ],
   },
   {
     offset: 1,
-    load: "low",
-    duties: [{ task: "Recovery checks", assignedTo: "A. Khan" }],
+    load: "high",
+    duties: [{ task: "Water", assignedTo: "Zeilinga" }],
     sessions: [
-      { title: "Mobility & Activation", start: "07:00", end: "08:00", type: "gym" },
-      { title: "Leadership Review", start: "09:00", end: "10:00", type: "meeting" },
-      { title: "Contact Skills", start: "10:30", end: "12:00", type: "field" },
+      { title: "AE Top-up 1", start: "06:00", end: "06:30", type: "field" },
+      { title: "Theory: Boland Preview", start: "07:00", end: "07:35", type: "theory" },
+      { title: "Units", start: "07:40", end: "07:55", type: "theory" },
+      { title: "1-on-1s", start: "08:00", end: "08:30", type: "meeting" },
+      { title: "Contact & Anaerobic Boosters", start: "09:00", end: "09:11", type: "field" },
+      { title: "Game Principles: Scenarios", start: "09:15", end: "10:00", type: "field" },
+      { title: "Game Principles: Shape & DM Reps", start: "10:30", end: "11:00", type: "field" },
+      { title: "Barefoot Cooldown", start: "11:00", end: "11:10", type: "rest" },
+      { title: "Lunch", start: "11:30", end: "12:00", type: "refuel" },
+      { title: "Coaches Meeting", start: "12:00", end: "12:30", type: "meeting" },
+      { title: "Gym: Primer, Main & Mobility", start: "12:40", end: "14:00", type: "gym" },
+      { title: "Aerobic Endurance Top-up 4", start: "14:00", end: "14:30", type: "field" },
     ],
   },
   {
     offset: 2,
-    load: "high",
-    duties: [{ task: "Pitch setup", assignedTo: "L. Dlamini" }],
+    load: "rest",
+    duties: [{ task: "Warm-up equipment", assignedTo: "Blaine" }],
     sessions: [
-      { title: "Gym Power", start: "07:00", end: "08:30", type: "gym" },
-      { title: "Tactical Theory", start: "09:00", end: "10:00", type: "theory" },
-      { title: "Aerobics Block", start: "10:30", end: "12:00", type: "field" },
+      { title: "Management Ops Meeting", start: "06:00", end: "06:30", type: "meeting" },
+      { title: "Mental Preparation", start: "07:00", end: "07:30", type: "theory" },
+      { title: "Physio Slot", start: "08:00", end: "08:30", type: "rest" },
+      { title: "Hookers Top-up", start: "08:30", end: "09:00", type: "field" },
+      { title: "Warm-up: Red Group", start: "09:00", end: "09:18", type: "field" },
+      { title: "SAQ: Own Planning", start: "09:18", end: "09:28", type: "field" },
+      { title: "President Visit", start: "10:30", end: "11:00", type: "meeting" },
+      { title: "Barefoot Cooldown", start: "11:00", end: "11:10", type: "rest" },
+      { title: "Lunch", start: "11:30", end: "12:00", type: "refuel" },
+      { title: "Gym: Primer, Main & Mobility", start: "12:40", end: "14:00", type: "gym" },
     ],
   },
   {
     offset: 3,
-    load: "rest",
-    duties: [{ task: "Recovery & stretch", assignedTo: "J. van Wyk" }],
+    load: "high",
+    duties: [{ task: "Balls & cones", assignedTo: "Wernich" }],
     sessions: [
-      { title: "Recovery Walk", start: "07:30", end: "08:15", type: "rest" },
-      { title: "Mobility Session", start: "17:00", end: "18:00", type: "rest" },
+      { title: "Man. Meeting", start: "06:00", end: "06:30", type: "meeting" },
+      { title: "Theory: Cell", start: "07:00", end: "07:55", type: "theory" },
+      { title: "Strapping", start: "08:00", end: "08:30", type: "rest" },
+      { title: "Warm-up: Orange Group", start: "09:00", end: "09:18", type: "field" },
+      { title: "Forwards: Skill Development", start: "09:33", end: "09:53", type: "field" },
+      { title: "Backs: Run, Pass, DM", start: "09:30", end: "10:00", type: "field" },
+      { title: "Forwards: Lineout", start: "10:00", end: "10:35", type: "field" },
+      { title: "Backs: Skill Development", start: "10:35", end: "11:00", type: "field" },
+      { title: "Barefoot Cooldown", start: "11:00", end: "11:10", type: "rest" },
+      { title: "Lunch", start: "11:30", end: "12:00", type: "refuel" },
+      { title: "Gym: Primer, Main & Mobility", start: "12:40", end: "14:00", type: "gym" },
+      { title: "Captain's Practice", start: "14:00", end: "15:00", type: "field" },
     ],
   },
   {
     offset: 4,
-    load: "rest",
-    duties: [{ task: "Heritage Day prep", assignedTo: "Team" }],
+    load: "low",
+    duties: [{ task: "Tackle bags & shields", assignedTo: "Cayno" }],
     sessions: [
-      { title: "Heritage Day", start: "10:00", end: "12:00", type: "meeting" },
-      { title: "Recovery", start: "15:00", end: "16:00", type: "rest" },
+      { title: "AE Top-up 3", start: "06:00", end: "06:30", type: "field" },
+      { title: "Reset & Recovery", start: "07:00", end: "08:00", type: "rest" },
+      { title: "Physio Slot", start: "08:00", end: "08:30", type: "rest" },
+      { title: "Hookers Top-up", start: "08:30", end: "09:00", type: "field" },
+      { title: "Game Principles: Set Piece", start: "09:00", end: "10:10", type: "field" },
+      { title: "President Visit", start: "10:30", end: "11:00", type: "meeting" },
+      { title: "Pre-match Meal", start: "11:30", end: "12:00", type: "refuel" },
+      { title: "Flight FA294 to Cape Town", start: "10:15", end: "12:35", type: "meeting" },
     ],
   },
   {
     offset: 5,
-    load: "rest",
-    duties: [{ task: "Braai support", assignedTo: "Team" }],
-    sessions: [{ title: "Family / Social Day", start: "11:00", end: "12:00", type: "rest" }],
+    load: "high",
+    duties: [{ task: "Gazebo & table", assignedTo: "Tireque" }],
+    sessions: [
+      { title: "Meet at OR Tambo International", start: "08:35", end: "09:00", type: "meeting" },
+      { title: "Match vs Boland", start: "15:00", end: "17:00", type: "field" },
+      { title: "Flight FA627 to JNB", start: "21:05", end: "23:10", type: "meeting" },
+    ],
   },
   {
     offset: 6,
-    load: "rest",
-    duties: [{ task: "Reset & weekly review", assignedTo: "Coaching staff" }],
-    sessions: [{ title: "Recovery & Review", start: "09:00", end: "10:00", type: "rest" }],
+    load: "low",
+    duties: [{ task: "Tackle bags & shields", assignedTo: "Theuns" }],
+    sessions: [
+      { title: "Low Aerobic Activity", start: "07:00", end: "07:45", type: "field" },
+      { title: "Static Stretches & Foam Roll Recovery", start: "07:45", end: "08:30", type: "rest" },
+    ],
   },
 ];
 
-const trainingWeekTemplate: TemplateDay[] = foundationWeekSeed.map((day) => ({
-  offset: day.offset,
-  load: day.load,
-  sessions: day.sessions,
+const blankWeekTemplate: TemplateDay[] = Array.from({ length: 7 }, (_, offset) => ({
+  offset,
+  load: "",
+  sessions: [],
+  duties: [],
 }));
 
-function createMatchWeekTemplate(matchDay: "friday" | "saturday"): TemplateDay[] {
-  const days = trainingWeekTemplate.map((day) => ({
-    ...day,
-    sessions: [...day.sessions],
-  }));
-  const matchOffset = matchDay === "friday" ? 4 : 5;
-  days[matchOffset] = {
-    offset: matchOffset,
-    load: "high",
-    sessions: [{ title: "Match", start: "19:00", end: "21:00", type: "field" }],
-  };
-  days[matchOffset === 4 ? 5 : 4] = {
-    offset: matchOffset === 4 ? 5 : 4,
-    load: "rest",
-    sessions: [{ title: "Recovery & Review", start: "09:00", end: "10:00", type: "rest" }],
-  };
-  return days;
-}
+const matchWeekQuote: QuoteEntry = {
+  text: "You are braver than you think, more talented than you know, and capable of more than you imagine.",
+  author: "Roy T. Bennett",
+};
 
 function createPreviewEvents(weekStart: Date, template: TemplateDay[]): CalendarEvent[] {
   return template.flatMap((day, dayIndex) =>
@@ -205,6 +235,7 @@ function createPreviewEvents(weekStart: Date, template: TemplateDay[]): Calendar
       return {
         id: `preview-${dayIndex}-${sessionIndex}`,
         title: session.title,
+        type: session.type,
         start,
         end,
         backgroundColor: typeInfo ? typeInfo.color + "26" : "#71717a26",
@@ -218,7 +249,7 @@ export default function CalendarPage() {
   const router = useRouter();
   const calendarRef = useRef<FullCalendar | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>(() =>
-    createPreviewEvents(startOfWeek(new Date()), trainingWeekTemplate)
+    createPreviewEvents(startOfWeek(new Date()), blankWeekTemplate)
   );
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -228,34 +259,12 @@ export default function CalendarPage() {
   const [type, setType] = useState("gym");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [template, setTemplate] = useState<"training" | "match">("training");
-  const [matchDay, setMatchDay] = useState<"friday" | "saturday">("saturday");
+  const [template, setTemplate] = useState<"blank" | "match" | "previous">("blank");
 
   const [weekAnchor, setWeekAnchor] = useState(() => startOfWeek(new Date()));
-  const [dayMeta, setDayMeta] = useState<Record<string, string>>(() => {
-    const values: Record<string, string> = {};
-    const weekStart = startOfWeek(new Date());
-    foundationWeekSeed.forEach((day) => {
-      const date = new Date(weekStart);
-      date.setDate(weekStart.getDate() + day.offset);
-      values[dateKey(date)] = day.load;
-    });
-    return values;
-  });
-  const [duties, setDuties] = useState<Record<string, DutyEntry[]>>(() => {
-    const values: Record<string, DutyEntry[]> = {};
-    const weekStart = startOfWeek(new Date());
-    foundationWeekSeed.forEach((day) => {
-      const date = new Date(weekStart);
-      date.setDate(weekStart.getDate() + day.offset);
-      values[dateKey(date)] = day.duties;
-    });
-    return values;
-  });
-  const [quotes, setQuotes] = useState<Record<string, QuoteEntry>>(() => {
-    const quote = foundationWeekSeed[0].quote;
-    return quote ? { [dateKey(startOfWeek(new Date()))]: quote } : {};
-  });
+  const [dayMeta, setDayMeta] = useState<Record<string, string>>({});
+  const [duties, setDuties] = useState<Record<string, DutyEntry[]>>({});
+  const [quotes, setQuotes] = useState<Record<string, QuoteEntry>>({});
   const [notes, setNotes] = useState<NoteEntry[]>([]);
   const [fixtures, setFixtures] = useState<FixtureEntry[]>([]);
 
@@ -266,10 +275,7 @@ export default function CalendarPage() {
   const [editingDutyTask, setEditingDutyTask] = useState("");
   const [editingDutyPlayer, setEditingDutyPlayer] = useState("");
 
-  const [draftQuote, setDraftQuote] = useState<QuoteEntry>(() => {
-    const quote = foundationWeekSeed[0].quote;
-    return quote || { text: "", author: "" };
-  });
+  const [draftQuote, setDraftQuote] = useState<QuoteEntry>({ text: "", author: "" });
 
   const [bdayDate, setBdayDate] = useState("");
   const [bdayName, setBdayName] = useState("");
@@ -289,47 +295,6 @@ export default function CalendarPage() {
 
   useEffect(() => {
     let cancelled = false;
-
-    const seedFoundationWeek = async () => {
-      try {
-        const sessionSnap = await getDocs(collection(db, "sessions"));
-        if (cancelled || !sessionSnap.empty) return;
-
-        const weekStart = startOfWeek(new Date());
-        const seedDays = foundationWeekSeed.map((day) => {
-          const date = new Date(weekStart);
-          date.setDate(weekStart.getDate() + day.offset);
-          return {
-            ...day,
-            date,
-          };
-        });
-
-        await Promise.all(
-          seedDays.flatMap(({ date, load, quote, duties, sessions }) => [
-            setDoc(doc(db, "dayMeta", dateKey(date)), { load }, { merge: true }),
-            ...(quote
-              ? [setDoc(doc(db, "quotes", dateKey(date)), quote, { merge: true })]
-              : []),
-            setDoc(doc(db, "duties", dateKey(date)), { tasks: duties }, { merge: true }),
-            ...sessions.map((session) =>
-              addDoc(collection(db, "sessions"), {
-                title: session.title,
-                type: session.type,
-                start: Timestamp.fromDate(combineDateAndTime(date, session.start)),
-                end: Timestamp.fromDate(combineDateAndTime(date, session.end)),
-                lead: "",
-              })
-            ),
-          ])
-        );
-      } catch (error) {
-        console.warn("Firestore schedule seed unavailable; showing the local preview.", error);
-      }
-    };
-
-    seedFoundationWeek();
-
     const unsub = onSnapshot(collection(db, "sessions"), (snap) => {
       const loaded = snap.docs.map((d) => {
         const data = d.data();
@@ -337,6 +302,7 @@ export default function CalendarPage() {
         return {
           id: d.id,
           title: data.title,
+          type: data.type,
           start: data.start.toDate(),
           end: data.end.toDate(),
           backgroundColor: typeInfo ? typeInfo.color + "26" : "#71717a26",
@@ -547,16 +513,69 @@ export default function CalendarPage() {
   }
 
   function applyTemplate() {
-    const selectedTemplate =
-      template === "training" ? trainingWeekTemplate : createMatchWeekTemplate(matchDay);
-    setEvents(createPreviewEvents(weekAnchor, selectedTemplate));
+    const previousWeek = new Date(weekAnchor);
+    previousWeek.setDate(previousWeek.getDate() - 7);
+    const selectedTemplate: TemplateDay[] =
+      template === "blank"
+        ? blankWeekTemplate
+        : template === "match"
+          ? matchWeekTemplate
+          : Array.from({ length: 7 }, (_, offset) => {
+              const sourceDate = new Date(previousWeek);
+              sourceDate.setDate(previousWeek.getDate() + offset);
+              const sourceKey = dateKey(sourceDate);
+              return {
+                offset,
+                load: dayMeta[sourceKey] || "",
+                duties: duties[sourceKey] || [],
+                sessions: events
+                  .filter((event) => dateKey(event.start) === sourceKey)
+                  .map((event) => ({
+                    title: event.title,
+                    start: toTimeString(event.start),
+                    end: toTimeString(event.end),
+                    type: event.type || "field",
+                  })),
+              };
+            });
+    const nextEvents = createPreviewEvents(weekAnchor, selectedTemplate);
+    const targetKeys = new Set(weekDays.map(dateKey));
+    setEvents((current) => [
+      ...current.filter((event) => !targetKeys.has(dateKey(event.start))),
+      ...nextEvents,
+    ]);
     const nextLoads: Record<string, string> = {};
+    const nextDuties: Record<string, DutyEntry[]> = {};
     selectedTemplate.forEach((day) => {
       const date = new Date(weekAnchor);
       date.setDate(weekAnchor.getDate() + day.offset);
-      nextLoads[dateKey(date)] = day.load;
+      const key = dateKey(date);
+      if (day.load) nextLoads[key] = day.load;
+      nextDuties[key] = day.duties || [];
     });
-    setDayMeta((current) => ({ ...current, ...nextLoads }));
+    setDayMeta((current) => {
+      const next = { ...current };
+      weekDays.forEach((day) => delete next[dateKey(day)]);
+      return { ...next, ...nextLoads };
+    });
+    setDuties((current) => ({ ...current, ...nextDuties }));
+    const sourceQuote = template === "match" ? matchWeekQuote : template === "previous" ? quotes[dateKey(previousWeek)] : undefined;
+    setDraftQuote(sourceQuote || { text: "", author: "" });
+    setNotes((current) => [
+      ...current.filter((note) => note.type !== "birthday" || !targetKeys.has(note.date)),
+      ...(template === "match"
+        ? [{ id: `preview-birthday-${dateKey(weekAnchor)}`, date: dateKey(weekAnchor), text: "Liam", type: "birthday" }]
+        : template === "previous"
+          ? current
+            .filter((note) => {
+              const noteDate = new Date(note.date);
+              const sourceEnd = new Date(previousWeek);
+              sourceEnd.setDate(sourceEnd.getDate() + 7);
+              return note.type === "birthday" && noteDate >= previousWeek && noteDate < sourceEnd;
+            })
+            .map((note) => ({ ...note, id: `preview-${note.id}`, date: dateKey(new Date(new Date(note.date).setDate(new Date(note.date).getDate() + 7))) }))
+          : []),
+    ]);
   }
 
   async function setDayLoad(key: string, load: string) {
@@ -664,28 +683,14 @@ export default function CalendarPage() {
             </p>
             <select
               value={template}
-              onChange={(e) => setTemplate(e.target.value as "training" | "match")}
+              onChange={(e) => setTemplate(e.target.value as "blank" | "match" | "previous")}
               className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm outline-none"
             >
-              <option value="training">Training Week</option>
-              <option value="match">Match Week</option>
+              <option value="blank">Blank Template</option>
+              <option value="match">Match Week Template</option>
+              <option value="previous">Previous Week Template</option>
             </select>
           </div>
-          {template === "match" && (
-            <div className="flex-1">
-              <label className="text-xs text-neutral-500 uppercase tracking-wide mb-2 block">
-                Match day
-              </label>
-              <select
-                value={matchDay}
-                onChange={(e) => setMatchDay(e.target.value as "friday" | "saturday")}
-                className="w-full bg-neutral-800 border border-neutral-700 rounded-xl px-3 py-2 text-sm outline-none"
-              >
-                <option value="saturday">Saturday</option>
-                <option value="friday">Friday</option>
-              </select>
-            </div>
-          )}
           <button
             onClick={applyTemplate}
             className="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-4 py-2 text-sm font-medium"
