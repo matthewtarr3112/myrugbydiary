@@ -191,47 +191,48 @@ export default function PlayerCardPage() {
             onChange={(e) => setPlayer({ ...player, photoUrl: e.target.value || null })}
             className="w-full bg-neutral-900 border border-neutral-700 rounded-xl px-3 py-2 text-sm"
           />
-          {!isNew && (
-            <div className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-900 p-3">
-              <label className="block text-xs uppercase tracking-wide text-neutral-500">
-                Player email
-              </label>
-              <input
-                type="email"
-                placeholder="player@example.com"
-                value={player.email ?? ""}
-                onChange={(e) =>
-                  setPlayer({
-                    ...player,
-                    email: e.target.value || null,
-                    inviteStatus: player.inviteStatus === "active" ? "active" : "not_invited",
-                  })
-                }
-                className="w-full rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={handleInvite}
-                disabled={
-                  inviting ||
-                  !player.email?.trim() ||
-                  player.inviteStatus === "active"
-                }
-                className="w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-black disabled:opacity-50"
-              >
-                {inviting
+          <div className="space-y-2 rounded-xl border border-neutral-800 bg-neutral-900 p-3">
+            <label className="block text-xs uppercase tracking-wide text-neutral-500">
+              Player email
+            </label>
+            <input
+              type="email"
+              placeholder="player@example.com"
+              value={player.email ?? ""}
+              onChange={(e) =>
+                setPlayer({
+                  ...player,
+                  email: e.target.value || null,
+                  inviteStatus: player.inviteStatus === "active" ? "active" : "not_invited",
+                })
+              }
+              className="w-full rounded-xl border border-neutral-700 bg-neutral-800 px-3 py-2 text-sm"
+            />
+            <button
+              type="button"
+              onClick={handleInvite}
+              disabled={
+                isNew ||
+                inviting ||
+                !player.email?.trim() ||
+                player.inviteStatus === "active"
+              }
+              className="w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-semibold text-black disabled:opacity-50"
+            >
+              {isNew
+                ? "Save player before inviting"
+                : inviting
                   ? "Sending invite..."
                   : player.inviteStatus === "active"
                     ? "Player account active"
                     : player.inviteStatus === "invited"
                       ? "Resend Invite"
                       : "Invite to App"}
-              </button>
-              {inviteMessage && (
-                <p className="text-xs text-neutral-400">{inviteMessage}</p>
-              )}
-            </div>
-          )}
+            </button>
+            {inviteMessage && (
+              <p className="text-xs text-neutral-400">{inviteMessage}</p>
+            )}
+          </div>
         </div>
 
         {/* Right: details form */}
