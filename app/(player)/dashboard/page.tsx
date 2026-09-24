@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/useAuth";
 import { dateKey, getWeekStart } from "@/lib/date";
 import { normalizeProgram, ProgramWeek } from "@/lib/program";
 import { WeatherWidget } from "@/components/WeatherWidget";
+import { ScheduleWidget } from "@/components/ScheduleWidget";
 import { ProgramViewer } from "@/components/ProgramViewer";
 
 // TEMP: player login/role assignment isn't wired up yet, so the auth guard
@@ -95,6 +96,13 @@ export default function PlayerHome() {
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <WeatherWidget />
         </div>
+
+        <section className="mt-6">
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
+            <CalendarDays className="h-5 w-5 text-emerald-500" /> Today&apos;s schedule
+          </h2>
+          <ScheduleWidget />
+        </section>
 
         <section className="mt-8">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
