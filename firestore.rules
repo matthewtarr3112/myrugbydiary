@@ -12,12 +12,22 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow create: if signedIn()
-        && request.auth.uid == userId
-        && request.resource.data.role in ["coach", "player"];
+      // Allow creation:
+      // - Users can create their own user document but only with role "player".
+      // - Coaches can create user documents for players or other coaches.
+      allow create: if (
+        (signedIn() && request.auth.uid == userId && request.resource.data.role == "player")
+        || (isCoach() && request.resource.data.role in ["coach", "player"])
+      );
+      // Reads allowed for the user themself or coaches
       allow read: if signedIn()
         && (request.auth.uid == userId || isCoach());
-      allow update: if isCoach() || (signedIn() && request.auth.uid == userId);
+      // Updates:
+      // - Coaches may update any user document.
+      // - A user may update their own document but may not change their role.
+      allow update: if isCoach()
+        || (signedIn() && request.auth.uid == userId
+            && request.resource.data.role == resource.data.role);
       allow delete: if isCoach();
     }
 
@@ -65,7 +75,11 @@ service cloud.firestore {
           signedIn()
           && resource.data.email == request.auth.token.email
           && request.resource.data.uid == request.auth.uid
-          && request.resource.data.inviteStatus == "active"
+          // Players may accept an invite (pending -> active) but otherwise may not change inviteStatus
+          && (
+            request.resource.data.inviteStatus == resource.data.inviteStatus
+            || (resource.data.inviteStatus == "pending" && request.resource.data.inviteStatus == "active")
+          )
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "uid", "inviteStatus", "name", "dob", "heightCm", "weightKg", "photoUrl"
           ])
