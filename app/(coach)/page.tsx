@@ -77,6 +77,7 @@ export default function CoachHome() {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
   const [dayMeta, setDayMeta] = useState<Record<string, string>>({});
+  const [duties, setDuties] = useState<Record<string, { task: string; assignedTo: string }[]>>({});
   const [notes, setNotes] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<Record<string, { text: string; author: string }>>({});
   const [weather, setWeather] = useState<any>(null);
@@ -115,6 +116,23 @@ export default function CoachHome() {
       const map: Record<string, string> = {};
       snap.docs.forEach((d) => (map[d.id] = d.data().load));
       setDayMeta(map);
+    });
+    return unsub;
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "duties"), (snap) => {
+      const map: Record<string, { task: string; assignedTo: string }[]> = {};
+      snap.docs.forEach((d) => {
+        const data = d.data() as {
+          tasks?: { task?: string; assignedTo?: string }[];
+        };
+        map[d.id] = (data.tasks || []).map((duty) => ({
+          task: duty.task || "Unassigned task",
+          assignedTo: duty.assignedTo || "Unassigned",
+        }));
+      });
+      setDuties(map);
     });
     return unsub;
   }, []);
@@ -160,6 +178,7 @@ export default function CoachHome() {
 
   const selectedKey = dateKey(selectedDate);
   const todaysLoad = dayMeta[selectedKey];
+  const todaysDuties = duties[selectedKey] || [];
   const weekKey = dateKey(getWeekStart(selectedDate));
   const quote = quotes[weekKey];
 
@@ -415,7 +434,7 @@ export default function CoachHome() {
               Notes & Reminders
             </span>
           </div>
-          {todaysBirthdays.length === 0 && reminders.length === 0 ? (
+          {todaysBirthdays.length === 0 && reminders.length === 0 && todaysDuties.length === 0 ? (
             <p className="text-neutral-600 text-sm">No notes yet</p>
           ) : (
             <div className="space-y-1">
@@ -429,6 +448,26 @@ export default function CoachHome() {
                   {r.text}
                 </p>
               ))}
+              {todaysDuties.length > 0 && (
+                <div className="mt-3 border-t border-neutral-800 pt-3">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-emerald-400">
+                    Duties & Tasks
+                  </p>
+                  <div className="space-y-2">
+                    {todaysDuties.map((duty, index) => (
+                      <div
+                        key={`${duty.task}-${duty.assignedTo}-${index}`}
+                        className="flex items-start justify-between gap-3 rounded-xl bg-black/20 px-3 py-2"
+                      >
+                        <span className="text-sm text-neutral-200">{duty.task}</span>
+                        <span className="shrink-0 text-xs text-neutral-500">
+                          {duty.assignedTo}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
